@@ -1,9 +1,9 @@
 package com.example.photagrapheryern
 
-//import com.example.photagrapheryern.ml.ImageAnalyzer
 import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
@@ -16,12 +16,14 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
@@ -40,23 +42,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import com.example.photagrapheryern.FirebaseImageAnalyzer
-import com.google.firebase.Firebase
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+// Data class for analysis result
+data class AnalysisResult(
+    val suggestion: String,
+    val enhancedImage: Bitmap
+)
+
 @Composable
 fun CameraPreview(lifecycleOwner: LifecycleOwner) {
     val context = LocalContext.current
     val labelText = remember { mutableStateOf("Point your camera at something...") }
-    val suggestionText = remember { mutableStateOf("") }
+    val analysisResult = remember { mutableStateOf<AnalysisResult?>(null) }
 
     var flashMode by remember { mutableStateOf(ImageCapture.FLASH_MODE_OFF) }
     var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
@@ -113,7 +120,22 @@ fun CameraPreview(lifecycleOwner: LifecycleOwner) {
 
         Text(labelText.value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp))
 
-        Text(suggestionText.value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
+        analysisResult.value?.let { result ->
+            Text(
+                result.suggestion,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(16.dp)
+            )
+
+            Image(
+                bitmap = result.enhancedImage.asImageBitmap(),
+                contentDescription = "AI-enhanced image",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .padding(16.dp)
+            )
+        }
 
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween) {
@@ -128,11 +150,13 @@ fun CameraPreview(lifecycleOwner: LifecycleOwner) {
             Button(onClick = {
                 takePhotoWithMediaStore(context, imageCapture)
                 coroutineScope.launch {
-                    // grab latest frame bitmap from previewView
                     val bitmap = previewView.bitmap ?: return@launch
-                    val prompt = "Provide tips on angle, lighting, pose based on the scene. Shorten your response for up to 5 lines. Also provide a sample picture with the improvements"
-                    suggestionText.value = "Analyzing..."
-                    suggestionText.value = FirebaseImageAnalyzer.analyzeImage(bitmap, prompt)
+                    val prompttext = "Provide tips on angle, lighting, pose based on the scene. Shorten your response for up to 5 lines. Also provide a sample picture with the improvements"
+                    val result = FirebaseImageAnalyzer.analyzeImage(bitmap, prompttext)
+                    analysisResult.value = AnalysisResult(
+                        suggestion = result.first,
+                        enhancedImage = result.second
+                    )
                 }
             }) {
                 Text("Take Photo")
