@@ -4,6 +4,9 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
+
+    // Kotlin serialization plugin for type safe routes and navigation arguments
+    kotlin("plugin.serialization") version "2.0.21" // Keep this specific version for the plugin
 }
 
 android {
@@ -55,22 +58,40 @@ android {
 }
 
 dependencies {
-    // AndroidX + Compose
+    // Apply the Compose BOM FIRST
+    implementation(platform(libs.androidx.compose.bom))
+
+    // AndroidX + Compose (referencing from libs.versions.toml where possible)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.core.splashscreen)
+
+    // Compose UI and Material3 libraries
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
-    implementation("androidx.compose.ui:ui:1.6.0")
-    implementation("androidx.compose.material3:material3:1.2.0")
-    implementation("androidx.compose.foundation:foundation:1.6.0")
-    implementation("androidx.activity:activity-compose:1.8.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
-    implementation("androidx.core:core-splashscreen:1.0.1")
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.androidx.material3) // This correctly gets Material3 from the BOM
+
+    // IMPORTANT: Change this line to use the "material" icons extended
+    implementation(libs.androidx.material.icons.extended) // <--- THIS IS THE FIX
+
+    // Firebase (using Firebase BOM)
+//    implementation(platform(libs.firebase.bom))
+//    implementation(libs.firebase.analytics)
+//    implementation(libs.firebase.crashlytics.ndk)
+
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:34.0.0"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-crashlytics-ndk")
+
+    // Jetpack Compose Navigation
+    val nav_version = "2.9.2" // Keep local or from libs.versions.toml
+    implementation("androidx.navigation:navigation-compose:$nav_version")
+
+    // Kotlin serialization library
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     // CameraX
     implementation("androidx.camera:camera-core:1.3.0")
@@ -81,20 +102,18 @@ dependencies {
     // ML Kit
     implementation("com.google.mlkit:image-labeling:17.0.7")
 
-    // Firebase
-    implementation(platform("com.google.firebase:firebase-bom:34.0.0"))
-    implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-crashlytics-ndk")
+    // Coil for image loading
+    implementation("io.coil-kt:coil-compose:2.7.0")
 
     // Kotlin Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // Testing
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    // Testing Dependencies
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.6.0")
-    debugImplementation("androidx.compose.ui:ui-tooling:1.6.0")
-    debugImplementation("androidx.compose.ui:ui-test-manifest:1.6.0")
+    androidTestImplementation(libs.androidx.ui.test.junit4)
+    debugImplementation(libs.androidx.ui.tooling)
+    debugImplementation(libs.androidx.ui.test.manifest)
 }
