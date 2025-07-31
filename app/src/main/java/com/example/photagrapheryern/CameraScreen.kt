@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.util.Log
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -115,7 +116,8 @@ fun CameraScreen(navController: NavController) {
     ) { uri: Uri? ->
         if (uri != null) {
             val encodedUri = Uri.encode(uri.toString())
-            navController.navigate("photo_display_screen/$encodedUri")
+            // --- CHANGE HERE: fromCamera is FALSE when picking from gallery ---
+            navController.navigate("photo_display_screen/$encodedUri?fromCamera=${false}")
         } else {
             // User cancelled the picker
             Toast.makeText(context, "Image selection cancelled.", Toast.LENGTH_SHORT).show()
@@ -194,50 +196,50 @@ fun CameraScreen(navController: NavController) {
                         }
 
                         // *** AI Label Card and Overlapping Image ***
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter) // Aligns this whole container to the bottom-center of the camera preview
-                                .fillMaxWidth(0.9f)
-                                .padding(bottom = 16.dp)
-                        ) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                GlassmorphismCardWithText(
-                                    text = labelText.value,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 70.dp, max = 180.dp)
-                                )
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 70.dp, max = 180.dp)
-                                        .clip(MaterialTheme.shapes.medium)
-                                        .background(Color.Black.copy(alpha = 0.5f))
-                                        .border(1.dp, Color.White.copy(alpha = 0.3f), MaterialTheme.shapes.medium),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = labelText.value,
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                    )
-                                }
-                            }
-
-                            Image(
-                                painter = painterResource(id = R.drawable.sparkle),
-                                contentDescription = "Card Overlap Image",
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .size(64.dp)
-                                    .offset(
-                                        x = 24.dp,
-                                        y = -24.dp
-                                    )
-                            )
-                        }
+//                        Box(
+//                            modifier = Modifier
+//                                .align(Alignment.BottomCenter) // Aligns this whole container to the bottom-center of the camera preview
+//                                .fillMaxWidth(0.9f)
+//                                .padding(bottom = 16.dp)
+//                        ) {
+//                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+//                                GlassmorphismCardWithText(
+//                                    text = labelText.value,
+//                                    modifier = Modifier
+//                                        .fillMaxWidth()
+//                                        .heightIn(min = 70.dp, max = 180.dp)
+//                                )
+//                            } else {
+//                                Box(
+//                                    modifier = Modifier
+//                                        .fillMaxWidth()
+//                                        .heightIn(min = 70.dp, max = 180.dp)
+//                                        .clip(MaterialTheme.shapes.medium)
+//                                        .background(Color.Black.copy(alpha = 0.5f))
+//                                        .border(1.dp, Color.White.copy(alpha = 0.3f), MaterialTheme.shapes.medium),
+//                                    contentAlignment = Alignment.Center
+//                                ) {
+//                                    Text(
+//                                        text = labelText.value,
+//                                        color = Color.White,
+//                                        style = MaterialTheme.typography.headlineSmall,
+//                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+//                                    )
+//                                }
+//                            }
+//
+//                            Image(
+//                                painter = painterResource(id = R.drawable.sparkle),
+//                                contentDescription = "Card Overlap Image",
+//                                modifier = Modifier
+//                                    .align(Alignment.TopEnd)
+//                                    .size(64.dp)
+//                                    .offset(
+//                                        x = 24.dp,
+//                                        y = -24.dp
+//                                    )
+//                            )
+//                        }
                     } // End of Camera Preview Box
 
                     // Spacer between camera preview and controls row
@@ -291,7 +293,10 @@ fun CameraScreen(navController: NavController) {
                                     photoUri?.let { uri ->
                                         mostRecentPhotoUri = uri
                                         val encodedUri = Uri.encode(uri.toString())
-                                        navController.navigate("photo_display_screen/$encodedUri")
+                                        val navigateRoute = "photo_display_screen/$encodedUri?fromCamera=${true}"
+                                        // ADD THIS LINE:
+                                        Log.d("PhotoAppDebug", "CameraScreen: Navigating to: $navigateRoute")
+                                        navController.navigate(navigateRoute)
                                     }
                                 }
                             },

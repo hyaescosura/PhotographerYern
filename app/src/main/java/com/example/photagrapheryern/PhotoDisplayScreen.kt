@@ -4,14 +4,16 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,18 +28,40 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import android.util.Log // Import Log for debugging
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhotoDisplayScreen(
     navController: NavController,
-    photoUri: Uri?
+    photoUri: Uri?,
+    fromCamera: Boolean = false // Default to false if not provided
 ) {
     val context = LocalContext.current
 
     val Montserrat = FontFamily(
         Font(R.font.montserrat_semibold, FontWeight.SemiBold)
     )
+
+    var showPopup by remember { mutableStateOf(false) }
+
+    // Ensure these lines are present:
+    Log.d("PhotoAppDebug", "PhotoDisplayScreen: Received fromCamera: $fromCamera (at start of composable)")
+    Log.d("PhotoAppDebug", "PhotoDisplayScreen: Received photoUri: $photoUri")
+
+
+    LaunchedEffect(key1 = fromCamera) {
+        // Ensure this line is present:
+        Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect triggered with fromCamera: $fromCamera")
+        if (fromCamera) {
+            showPopup = true
+            // Ensure this line is present:
+            Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect: Setting showPopup to true")
+        }
+    }
 
     Scaffold(
         // The topBar is still removed
@@ -59,7 +83,7 @@ fun PhotoDisplayScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp), // General horizontal padding
+                    .padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(modifier = Modifier.height(60.dp))
@@ -80,48 +104,71 @@ fun PhotoDisplayScreen(
                             .wrapContentHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Image(
-                            painter = rememberAsyncImagePainter(model = photoUri),
-                            contentDescription = "Captured Photo",
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(24.dp)),
-                            contentScale = ContentScale.FillWidth
-                        )
+                                .wrapContentHeight()
+                        ) {
+                            Image(
+                                painter = rememberAsyncImagePainter(model = photoUri),
+                                contentDescription = "Captured Photo",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(24.dp)),
+                                contentScale = ContentScale.FillWidth
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // MODIFIED: Row for the buttons
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth(),
-                            // Change arrangement to Center, and use a Spacer for custom gap
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Recapture Button
                             Button(
                                 onClick = { navController.popBackStack() },
                                 shape = RoundedCornerShape(50),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D472B)),
-                                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
                             ) {
-                                Text(
-                                    text = "Recapture",
-                                    color = Color.White,
-                                    fontFamily = Montserrat,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 16.sp
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Recapture",
+                                        color = Color.White,
+                                        fontFamily = Montserrat,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 16.sp
+                                    )
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color(0xFFFCD04C),
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Refresh,
+                                                contentDescription = "Recapture",
+                                                tint = Color.Black,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
 
-                            // NEW: Spacer between the buttons to control their proximity
-                            Spacer(modifier = Modifier.width(56.dp)) // Adjust this width (e.g., 8.dp, 16.dp, 24.dp)
+                            Spacer(modifier = Modifier.width(52.dp))
 
-                            // SHARE BUTTON
                             Surface(
                                 shape = CircleShape,
-                                color = Color(0xFF1D472B),
+                                color = Color.Black.copy(alpha = 0.5f),
                                 modifier = Modifier
                                     .size(width = 48.dp, height = 48.dp)
                             ) {
@@ -157,6 +204,80 @@ fun PhotoDisplayScreen(
                     )
                 }
             }
+
+            // --- AlertDialog for the Pop-up Card (with close icon) ---
+            if (showPopup) {
+                AlertDialog(
+                    onDismissRequest = { showPopup = false },
+                    properties = DialogProperties(usePlatformDefaultWidth = false),
+                    content = {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth(0.85f)
+                                .heightIn(max = 350.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(28.dp)
+                            ) {
+                                // Close Icon at top right
+                                IconButton(
+                                    onClick = { showPopup = false },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .size(32.dp)
+                                        .offset(x = 12.dp, y = (-12).dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = "Close",
+                                        tint = Color.DarkGray,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(top = 16.dp), // Add top padding to avoid icon overlapping text
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Text(
+                                        text = "Photo Taken!",
+                                        fontFamily = Montserrat,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 24.sp,
+                                        color = Color.Black,
+                                        style = LocalTextStyle.current.copy(letterSpacing = 2.sp)
+                                    )
+                                    Text(
+                                        text = "Congratulations! Your photograph has been successfully captured and processed. This image is now ready for you to explore its full potential. You can choose to apply various editing tools, enhance its colors, or add unique filters to make it truly shine. Alternatively, it's perfectly poised for sharing with your friends and family on social media or through direct messaging. We hope you cherish this moment captured through your lens.",
+                                        fontFamily = Montserrat,
+                                        fontSize = 16.sp,
+                                        color = Color.DarkGray,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 8.dp)
+                                    )
+                                    Text(
+                                        text = "Remember, every photo tells a story, and yours is just beginning. Take your time to perfect it, or share its raw beauty with the world. Our app provides all the tools you need to bring your creative vision to life. Enjoy the process of transforming your images into masterpieces, or simply sharing them as beautiful memories. Thank you for using our photography app!",
+                                        fontFamily = Montserrat,
+                                        fontSize = 16.sp,
+                                        color = Color.DarkGray,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+            // --- END: AlertDialog for Pop-up Card ---
         }
     }
 }
