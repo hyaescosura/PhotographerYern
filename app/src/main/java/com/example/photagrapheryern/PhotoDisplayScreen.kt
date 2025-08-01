@@ -29,11 +29,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import coil.compose.rememberAsyncImagePainter
+import coil.compose.rememberAsyncImagePainter // Keep this for displaying the image from Uri
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import android.util.Log // Import Log for debugging
+import android.graphics.Bitmap // Import Bitmap
+import androidx.compose.ui.graphics.asImageBitmap // To convert Bitmap to ImageBitmap for Compose Image
+
+// NEW IMPORTS FOR URI TO BITMAP CONVERSION
+import android.graphics.ImageDecoder
+import android.os.Build
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,16 +55,55 @@ fun PhotoDisplayScreen(
     )
 
     var showPopup by remember { mutableStateOf(false) }
+    var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) }
+    var isLoadingAnalysis by remember { mutableStateOf(false) }
+    var analysisErrorMessage by remember { mutableStateOf<String?>(null) }
 
     Log.d("PhotoAppDebug", "PhotoDisplayScreen: Received fromCamera: $fromCamera (at start of composable)")
     Log.d("PhotoAppDebug", "PhotoDisplayScreen: Received photoUri: $photoUri")
 
-
-    LaunchedEffect(key1 = fromCamera) {
-        Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect triggered with fromCamera: $fromCamera")
-        if (fromCamera) {
+    LaunchedEffect(key1 = fromCamera, key2 = photoUri) {
+        Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect triggered with fromCamera: $fromCamera, photoUri: $photoUri")
+        if (fromCamera && photoUri != null) {
             showPopup = true
-            Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect: Setting showPopup to true")
+            isLoadingAnalysis = true // Start loading state
+            analysisErrorMessage = null // Clear any previous error
+            analysisResult = null // Clear previous result
+            Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect: Setting showPopup to true, starting analysis")
+
+            // Perform AI analysis here
+            try {
+                // --- MODIFIED SECTION: Convert Uri to Bitmap using ImageDecoder ---
+                val bitmap: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val source = ImageDecoder.createSource(context.contentResolver, photoUri)
+                    ImageDecoder.decodeBitmap(source) { decoder, info, source ->
+                        // Optional: Configure bitmap here, e.g., to be mutable if needed
+                        decoder.isMutableRequired = true // Set to true if you need to modify the bitmap later
+                    }
+                } else {
+                    // For older Android versions (API < 28)
+                    @Suppress("DEPRECATION")
+                    android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, photoUri)
+                }
+                // --- END MODIFIED SECTION ---
+
+                if (bitmap != null) {
+                    val promptText = "Provide tips on angle, lighting, pose based on the scene. Shorten your response for up to 5 lines. Also provide a sample picture with the improvements"
+                    val result = FirebaseImageAnalyzer.analyzeImage(bitmap, promptText)
+                    analysisResult = AnalysisResult(
+                        suggestion = result.first,
+                        enhancedImage = result.second
+                    )
+                } else {
+                    analysisErrorMessage = "Error: Could not load image for analysis."
+                    Log.e("PhotoDisplayScreen", "Could not convert Uri to Bitmap for analysis: $photoUri")
+                }
+            } catch (e: Exception) {
+                analysisErrorMessage = "Analysis failed: ${e.localizedMessage ?: "Unknown error"}"
+                Log.e("PhotoDisplayScreen", "AI analysis failed: ${e.message}", e)
+            } finally {
+                isLoadingAnalysis = false // End loading state
+            }
         }
     }
 
@@ -103,12 +148,12 @@ fun PhotoDisplayScreen(
                             .wrapContentHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // THIS IS THE BOX THAT CONTAINS THE PHOTO AND NOW THE SPARKLE IMAGES
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .wrapContentHeight()
                         ) {
+                            // This part still uses Coil for displaying the image, which is fine.
                             Image(
                                 painter = rememberAsyncImagePainter(model = photoUri),
                                 contentDescription = "Captured Photo",
@@ -120,23 +165,23 @@ fun PhotoDisplayScreen(
 
                             // SPARKLE IMAGE - Top Right of the PHOTO CARD
                             Image(
-                                painter = painterResource(id = R.drawable.sparkle), // Using R.drawable.sparkle for top right
+                                painter = painterResource(id = R.drawable.sparkle),
                                 contentDescription = "Sparkle decoration",
                                 modifier = Modifier
-                                    .align(Alignment.TopEnd) // Position relative to the photo card
-                                    .size(72.dp) // Set size to 72.dp
-                                    .offset(x = 20.dp, y = (-20).dp), // Adjust offset to position outside but near the corner
+                                    .align(Alignment.TopEnd)
+                                    .size(72.dp)
+                                    .offset(x = 20.dp, y = (-20).dp),
                                 contentScale = ContentScale.Fit
                             )
 
                             // SPARKLE IMAGE - Bottom Left of the PHOTO CARD
                             Image(
-                                painter = painterResource(id = R.drawable.sparkle), // Using R.drawable.sparkle for bottom left
+                                painter = painterResource(id = R.drawable.sparkle),
                                 contentDescription = "Sparkle decoration",
                                 modifier = Modifier
-                                    .align(Alignment.BottomStart) // Position relative to the photo card
-                                    .size(72.dp) // Set size to 72.dp
-                                    .offset(x = (-20).dp, y = 20.dp), // Adjust offset to position outside but near the corner
+                                    .align(Alignment.BottomStart)
+                                    .size(72.dp)
+                                    .offset(x = (-20).dp, y = 20.dp),
                                 contentScale = ContentScale.Fit
                             )
                         }
@@ -232,9 +277,8 @@ fun PhotoDisplayScreen(
                 val interactionSource = remember { MutableInteractionSource() }
                 val isPressed by interactionSource.collectIsPressedAsState()
 
-                // Define the background color based on pressed state - TEMPORARILY BRIGHT FOR TESTING
                 val buttonBackgroundColor = if (isPressed) {
-                    Color.Blue.copy(alpha = 0.5f) // Change this line
+                    Color.Blue.copy(alpha = 0.5f)
                 } else {
                     Color.Transparent
                 }
@@ -253,44 +297,83 @@ fun PhotoDisplayScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(28.dp) // Main padding for the Card's content
+                                    .padding(28.dp)
                             ) {
-                                // IMPORTANT: Column comes first, so the IconButton can be drawn on top
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .verticalScroll(rememberScrollState())
-                                        .padding(top = 16.dp), // Add top padding to avoid icon overlapping text
+                                        .padding(top = 16.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    Text(
-                                        text = "Photo Taken!",
-                                        fontFamily = Montserrat,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 24.sp,
-                                        color = Color.Black,
-                                        style = LocalTextStyle.current.copy(letterSpacing = 2.sp)
-                                    )
-                                    Text(
-                                        text = "Congratulations! Your photograph has been successfully captured and processed. This image is now ready for you to explore its full potential. You can choose to apply various editing tools, enhance its colors, or add unique filters to make it truly shine. Alternatively, it's perfectly poised for sharing with your friends and family on social media or through direct messaging. We hope you cherish this moment captured through your lens.",
-                                        fontFamily = Montserrat,
-                                        fontSize = 16.sp,
-                                        color = Color.DarkGray,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                        modifier = Modifier.padding(horizontal = 8.dp)
-                                    )
-                                    Text(
-                                        text = "Remember, every photo tells a story, and yours is just beginning. Take your time to perfect it, or share its raw beauty with the world. Our app provides all the tools you need to bring your creative vision to life. Enjoy the process of transforming your images into masterpieces, or simply sharing them as beautiful memories. Thank you for using our photography app!",
-                                        fontFamily = Montserrat,
-                                        fontSize = 16.sp,
-                                        color = Color.DarkGray,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                        modifier = Modifier.padding(horizontal = 8.dp)
-                                    )
+                                    // --- AI ANALYSIS CONTENT ---
+                                    if (isLoadingAnalysis) {
+                                        CircularProgressIndicator(color = Color(0xFFFCD04C))
+                                        Text(
+                                            text = "Analyzing your photo...",
+                                            fontFamily = Montserrat,
+                                            fontSize = 16.sp,
+                                            color = Color.DarkGray
+                                        )
+                                    } else if (analysisErrorMessage != null) {
+                                        Text(
+                                            text = analysisErrorMessage!!,
+                                            fontFamily = Montserrat,
+                                            fontSize = 16.sp,
+                                            color = Color.Red,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                    } else if (analysisResult != null) {
+                                        Text(
+                                            text = "AI Photography Tips:",
+                                            fontFamily = Montserrat,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 20.sp,
+                                            color = Color.Black,
+                                            style = LocalTextStyle.current.copy(letterSpacing = 1.sp)
+                                        )
+                                        Text(
+                                            text = analysisResult!!.suggestion,
+                                            fontFamily = Montserrat,
+                                            fontSize = 16.sp,
+                                            color = Color.DarkGray,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                            modifier = Modifier.padding(horizontal = 8.dp)
+                                        )
+                                        analysisResult!!.enhancedImage?.let { enhancedBitmap ->
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Text(
+                                                text = "Suggested Improvement:",
+                                                fontFamily = Montserrat,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 18.sp,
+                                                color = Color.Black
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Image(
+                                                bitmap = enhancedBitmap.asImageBitmap(),
+                                                contentDescription = "Enhanced Photo Suggestion",
+                                                modifier = Modifier
+                                                    .fillMaxWidth(0.8f)
+                                                    .clip(RoundedCornerShape(12.dp)),
+                                                contentScale = ContentScale.FillWidth
+                                            )
+                                        }
+                                    } else {
+                                        Text(
+                                            text = "Tap the camera to take a photo and get AI tips!",
+                                            fontFamily = Montserrat,
+                                            fontSize = 16.sp,
+                                            color = Color.DarkGray,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                            modifier = Modifier.padding(horizontal = 8.dp)
+                                        )
+                                    }
+                                    // --- END AI ANALYSIS CONTENT ---
                                 }
 
-                                // Close Icon at top right - MOVED CLOSER TO CORNER
+                                // Close Icon at top right
                                 IconButton(
                                     onClick = {
                                         Log.d("PhotoAppDebug", "Close button clicked! Attempting to close popup.")
@@ -298,18 +381,18 @@ fun PhotoDisplayScreen(
                                     },
                                     modifier = Modifier
                                         .align(Alignment.TopEnd)
-                                        .size(36.dp) // Generous touch target size
-                                        .offset(x = 18.dp, y = (-18).dp) // Adjusted offset for closer corner placement
-                                        .clip(CircleShape) // Ensures circular touch area
-                                        .background(buttonBackgroundColor) // Apply the dynamic background color
-                                        .padding(8.dp), // Adds a buffer around the icon within the touch target
-                                    interactionSource = interactionSource // Attach the interaction source
+                                        .size(36.dp)
+                                        .offset(x = 18.dp, y = (-18).dp)
+                                        .clip(CircleShape)
+                                        .background(buttonBackgroundColor)
+                                        .padding(8.dp),
+                                    interactionSource = interactionSource
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Close,
                                         contentDescription = "Close",
-                                        tint = Color.DarkGray, // Keep icon tint constant
-                                        modifier = Modifier.size(32.dp) // Icon size remains the same
+                                        tint = Color.DarkGray,
+                                        modifier = Modifier.size(32.dp)
                                     )
                                 }
                             }
@@ -317,7 +400,6 @@ fun PhotoDisplayScreen(
                     }
                 )
             }
-            // --- END: AlertDialog for Pop-up Card ---
         }
     }
 }

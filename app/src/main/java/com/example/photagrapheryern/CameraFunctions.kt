@@ -3,6 +3,7 @@ package com.example.photagrapheryern
 import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -20,7 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import com.example.photagrapheryern.ml.ImageAnalyzer
+import com.example.photagrapheryern.ml.ImageAnalyzer // Assuming this is your local ML Kit ImageAnalyzer
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -28,7 +29,13 @@ import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-// ... (rememberCameraUseCases function remains the same as before) ...
+// Data class for analysis result - This can stay in CameraFunctions if it's strictly for camera-related analysis
+// Or move it to a shared file if used broadly across the app. For now, let's keep it here.
+data class AnalysisResult(
+    val suggestion: String,
+    val enhancedImage: Bitmap
+)
+
 @Composable
 fun rememberCameraUseCases(
     context: Context,
@@ -48,14 +55,13 @@ fun rememberCameraUseCases(
             it.setSurfaceProvider(previewView.surfaceProvider)
         }
 
-        val analyzer = ImageAnalysis.Builder()
+        // ImageAnalysis for continuous frame processing (e.g., for object detection labels)
+        val analyzerUseCase = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
             .also {
-                it.setAnalyzer(
-                    ContextCompat.getMainExecutor(context),
-                    ImageAnalyzer { label -> onLabelDetected(label) }
-                )
+                it.setAnalyzer(ContextCompat.getMainExecutor(context),
+                    ImageAnalyzer { label -> onLabelDetected(label) })
             }
 
         imageCapture.flashMode = flashMode
@@ -66,15 +72,14 @@ fun rememberCameraUseCases(
                 lifecycleOwner,
                 CameraSelector.Builder().requireLensFacing(lensFacing).build(),
                 preview,
-                imageCapture,
-                analyzer
+                analyzerUseCase, // Bind the analyzerUseCase
+                imageCapture
             )
-        } catch (exc: Exception) {
-            Log.e("CameraFunctions", "Use case binding failed", exc)
+        } catch (e: Exception) {
+            Log.e("CameraFunctions", "Failed to bind camera", e)
         }
     }
 }
-
 
 /**
  * Handles taking a photo and saving it to MediaStore.
@@ -90,51 +95,32 @@ suspend fun takePhotoWithMediaStore(
     imageCapture: ImageCapture
 ): Uri? = suspendCancellableCoroutine { continuation ->
     val name = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-
     val contentValues = ContentValues().apply {
         put(MediaStore.MediaColumns.DISPLAY_NAME, name)
         put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            put(MediaStore.MediaColumns.RELATIVE_PATH, "DCIM/PhotographerYern")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "DCIM/PhotographerYern")
         }
     }
 
-    val outputOptions = ImageCapture.OutputFileOptions.Builder(
+    val options = ImageCapture.OutputFileOptions.Builder(
         context.contentResolver,
         MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
         contentValues
     ).build()
 
-    imageCapture.takePicture(
-        outputOptions,
-        ContextCompat.getMainExecutor(context), // Use the main executor for the callback
+    imageCapture.takePicture(options, ContextCompat.getMainExecutor(context),
         object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                val savedUri = output.savedUri
-                if (savedUri != null) {
-                    Log.d("CameraFunctions", "Photo saved to MediaStore: $savedUri")
-                    // Show a toast on the UI thread as this is a background operation result
-                    Toast.makeText(context, "Photo saved to gallery!", Toast.LENGTH_SHORT).show()
-                    continuation.resume(savedUri) // Resume with the Uri on success
-                } else {
-                    Log.e("CameraFunctions", "Photo saved, but URI is null.")
-                    Toast.makeText(context, "Photo saved, but URI is null.", Toast.LENGTH_SHORT).show()
-                    continuation.resume(null) // Resume with null if URI is unexpectedly null
-                }
+                Toast.makeText(context, "Photo saved to gallery", Toast.LENGTH_SHORT).show()
+                Log.d("CameraFunctions", "Saved: ${output.savedUri}")
+                continuation.resume(output.savedUri)
             }
 
-            override fun onError(exception: ImageCaptureException) {
-                Log.e("CameraFunctions", "Photo capture failed: ${exception.message}", exception)
-                // Show a toast on the UI thread
-                Toast.makeText(context, "Photo capture failed: ${exception.message}", Toast.LENGTH_SHORT).show()
-                continuation.resumeWithException(exception) // Resume with exception on failure
+            override fun onError(exc: ImageCaptureException) {
+                Toast.makeText(context, "Capture failed", Toast.LENGTH_SHORT).show()
+                Log.e("CameraFunctions", "Error: ${exc.message}", exc)
+                continuation.resumeWithException(exc)
             }
-        }
-    )
-
-    // Handle cancellation of the coroutine
-    continuation.invokeOnCancellation {
-        // You can add cleanup logic here if necessary, though CameraX usually handles it.
-        Log.d("CameraFunctions", "Photo capture coroutine cancelled.")
-    }
+        })
 }

@@ -2,6 +2,7 @@ package com.example.photagrapheryern
 
 import android.content.ContentResolver
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -57,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -81,6 +83,8 @@ fun CameraScreen(navController: NavController) {
     var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
     val labelText = remember { mutableStateOf("Point your camera at something...") }
     var mostRecentPhotoUri by remember { mutableStateOf<Uri?>(null) } // State for the recent photo thumbnail
+    // State to hold the result of the Firebase AI analysis
+    var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) }
 
     // CameraX ImageCapture use case
     val imageCapture = remember {
@@ -195,39 +199,35 @@ fun CameraScreen(navController: NavController) {
                             )
                         }
 
-                        // *** AI Label Card and Overlapping Image ***
+                        // AI Label Card (uncommented and placed here)
+                        // This will display the label from your ML Kit ImageAnalyzer
 //                        Box(
 //                            modifier = Modifier
 //                                .align(Alignment.BottomCenter) // Aligns this whole container to the bottom-center of the camera preview
 //                                .fillMaxWidth(0.9f)
 //                                .padding(bottom = 16.dp)
 //                        ) {
-//                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-//                                GlassmorphismCardWithText(
+//                            // You had GlassmorphismCardWithText, assuming it's a custom composable.
+//                            // If not, you can use a regular Box with background and text.
+//                            // I'm using the simpler Box as per your commented out code.
+//                            Box(
+//                                modifier = Modifier
+//                                    .fillMaxWidth()
+//                                    .heightIn(min = 70.dp, max = 180.dp)
+//                                    .clip(MaterialTheme.shapes.medium)
+//                                    .background(Color.Black.copy(alpha = 0.5f))
+//                                    .border(1.dp, Color.White.copy(alpha = 0.3f), MaterialTheme.shapes.medium),
+//                                contentAlignment = Alignment.Center
+//                            ) {
+//                                Text(
 //                                    text = labelText.value,
-//                                    modifier = Modifier
-//                                        .fillMaxWidth()
-//                                        .heightIn(min = 70.dp, max = 180.dp)
+//                                    color = Color.White,
+//                                    style = MaterialTheme.typography.headlineSmall,
+//                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
 //                                )
-//                            } else {
-//                                Box(
-//                                    modifier = Modifier
-//                                        .fillMaxWidth()
-//                                        .heightIn(min = 70.dp, max = 180.dp)
-//                                        .clip(MaterialTheme.shapes.medium)
-//                                        .background(Color.Black.copy(alpha = 0.5f))
-//                                        .border(1.dp, Color.White.copy(alpha = 0.3f), MaterialTheme.shapes.medium),
-//                                    contentAlignment = Alignment.Center
-//                                ) {
-//                                    Text(
-//                                        text = labelText.value,
-//                                        color = Color.White,
-//                                        style = MaterialTheme.typography.headlineSmall,
-//                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-//                                    )
-//                                }
 //                            }
-//
+//                            // The sparkle image you had is commented out, leaving it that way for now.
+//                            /*
 //                            Image(
 //                                painter = painterResource(id = R.drawable.sparkle),
 //                                contentDescription = "Card Overlap Image",
@@ -239,10 +239,42 @@ fun CameraScreen(navController: NavController) {
 //                                        y = -24.dp
 //                                    )
 //                            )
+//                            */
 //                        }
                     } // End of Camera Preview Box
 
-                    // Spacer between camera preview and controls row
+                    // Display AI Analysis Results below the camera preview
+                    analysisResult?.let { result ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                result.suggestion,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+
+//                            Image(
+//                                bitmap = analysisResult.enhancedImage!!.asImageBitmap(),
+//                                contentDescription = "AI-enhanced image",
+                            Image(
+                                bitmap = result.enhancedImage.asImageBitmap(),
+                                contentDescription = "AI-enhanced image",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp) // Or adjust height as needed
+                                    .clip(RoundedCornerShape(12.dp)),
+                                contentScale = ContentScale.Fit // Use Fit to show the whole image
+                            )
+                        }
+                    }
+
+
+                    // Spacer between camera preview/analysis and controls row
                     Spacer(modifier = Modifier.height(24.dp))
 
                     // Controls below the camera preview (Gallery, Capture, Switch Camera)
@@ -285,28 +317,36 @@ fun CameraScreen(navController: NavController) {
                             }
                         }
 
-                        // Take Photo Button - Circular
-                        FloatingActionButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    val photoUri = takePhotoWithMediaStore(context, imageCapture)
-                                    photoUri?.let { uri ->
-                                        mostRecentPhotoUri = uri
-                                        val encodedUri = Uri.encode(uri.toString())
-                                        val navigateRoute = "photo_display_screen/$encodedUri?fromCamera=${true}"
-                                        // ADD THIS LINE:
-                                        Log.d("PhotoAppDebug", "CameraScreen: Navigating to: $navigateRoute")
-                                        navController.navigate(navigateRoute)
-                                    }
-                                }
-                            },
+                        // Take Photo Button - Circular Outline with Inner Circle
+                        // In your CameraScreen.kt file
+
+                        Box(
                             modifier = Modifier
                                 .size(72.dp)
-                                .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape),
-                            shape = CircleShape,
-                            containerColor = Color.White
+                                .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
+                                .clickable {
+                                    coroutineScope.launch {
+                                        // Capture the photo to gallery
+                                        val photoUri = takePhotoWithMediaStore(context, imageCapture)
+                                        photoUri?.let { uri ->
+                                            mostRecentPhotoUri = uri // Update thumbnail for CameraScreen thumbnail if you have one
+
+                                            // Navigate to PhotoDisplayScreen
+                                            val encodedUri = Uri.encode(uri.toString())
+                                            val navigateRoute = "photo_display_screen/$encodedUri?fromCamera=${true}"
+                                            Log.d("PhotoAppDebug", "CameraScreen: Navigating to: $navigateRoute")
+                                            navController.navigate(navigateRoute) // Make sure this is uncommented
+                                        }
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
-                            // No content
+                            Box(
+                                modifier = Modifier
+                                    .size(60.dp) // Smaller size for the inner circle
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                            )
                         }
 
                         // Camera Switch Button
@@ -331,6 +371,7 @@ fun CameraScreen(navController: NavController) {
     )
 }
 
+// Kept this function here as it's directly used by CameraScreen's UI for recent photo thumbnail
 private suspend fun getMostRecentPhotoUri(context: Context): Uri? = withContext(Dispatchers.IO) {
     val collection =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
