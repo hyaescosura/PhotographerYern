@@ -3,6 +3,7 @@ package com.example.photagrapheryern
 import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -20,6 +21,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,19 +36,25 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,8 +72,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import kotlinx.coroutines.Dispatchers
@@ -78,15 +93,22 @@ fun CameraScreen(navController: NavController) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
 
-    // State for UI elements and camera settings
+    // --- States for Camera UI and Logic ---
     var flashMode by remember { mutableStateOf(ImageCapture.FLASH_MODE_OFF) }
     var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
     val labelText = remember { mutableStateOf("Point your camera at something...") }
-    var mostRecentPhotoUri by remember { mutableStateOf<Uri?>(null) } // State for the recent photo thumbnail
-    // State to hold the result of the Firebase AI analysis
-    var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) }
+    var mostRecentPhotoUri by remember { mutableStateOf<Uri?>(null) }
 
-    // CameraX ImageCapture use case
+    // --- States for AI Analysis Popup within CameraScreen ---
+    var showAiPopupOnCamera by remember { mutableStateOf(false) }
+    var analysisResultOnCamera by remember { mutableStateOf<AnalysisResult?>(null) }
+    var isLoadingAnalysisOnCamera by remember { mutableStateOf(false) }
+    var analysisErrorMessageOnCamera by remember { mutableStateOf<String?>(null) }
+    var showAiIconOnCamera by remember { mutableStateOf(false) } // Controls visibility of AI icon
+
+    val Montserrat = FontFamily(Font(R.font.montserrat_semibold, FontWeight.SemiBold))
+
+    // CameraX ImageCapture use case setup
     val imageCapture = remember {
         ImageCapture.Builder()
             .setFlashMode(flashMode)
@@ -103,8 +125,8 @@ fun CameraScreen(navController: NavController) {
         }
     }
 
-    // Call the camera logic from CameraFunctions.kt (it's a @Composable helper)
-    rememberCameraUseCases( // Assuming this is a composable function that sets up CameraX lifecycle and analysis
+    // CameraX lifecycle management (assuming rememberCameraUseCases is a helper composable)
+    rememberCameraUseCases(
         context = context,
         lifecycleOwner = lifecycleOwner,
         previewView = previewView,
@@ -120,265 +142,371 @@ fun CameraScreen(navController: NavController) {
     ) { uri: Uri? ->
         if (uri != null) {
             val encodedUri = Uri.encode(uri.toString())
-            // --- CHANGE HERE: fromCamera is FALSE when picking from gallery ---
+            // Navigate to PhotoDisplayScreen; 'fromCamera' is false as it's from gallery
             navController.navigate("photo_display_screen/$encodedUri?fromCamera=${false}")
         } else {
-            // User cancelled the picker
             Toast.makeText(context, "Image selection cancelled.", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // Effect to load the most recent photo when the screen becomes active
-    LaunchedEffect(Unit) { // Runs once when the Composable enters the composition
-        coroutineScope.launch {
-            mostRecentPhotoUri = getMostRecentPhotoUri(context)
-        }
+    // --- Effects ---
+    LaunchedEffect(Unit) {
+        // Load the most recent photo when the screen first appears
+        mostRecentPhotoUri = getMostRecentPhotoUri(context)
     }
 
-    Scaffold(
-        content = { paddingValues ->
+    // --- UI Layout ---
+    Scaffold { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(Color(0xFF030303)) // Dark background for the whole screen
+        ) {
+            // Background Image
+            Image(
+                painter = painterResource(id = R.drawable.bg3),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+
+            // Semi-transparent overlay for better UI readability
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
-                // 1. Background Image
-                Image(
-                    painter = painterResource(id = R.drawable.bg3), // <--- REPLACE 'your_background_image'
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                    .background(Color.Black.copy(alpha = 0.5f))
+            )
 
-                // 2. Optional: Semi-transparent overlay to make UI elements more readable
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Camera Preview Area
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.5f)) // Adjust alpha for desired darkness
-                )
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .fillMaxWidth(0.95f)
+                        .aspectRatio(9f / 16f)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color.Black),
+                    contentAlignment = Alignment.Center
                 ) {
-                    // Spacer at the top (optional, can adjust for overall vertical position)
-                    Spacer(modifier = Modifier.height(24.dp))
+                    AndroidView(
+                        factory = { previewView },
+                        modifier = Modifier.fillMaxSize()
+                    )
 
-                    // Camera Preview Area
+                    // Flash Toggle Button
+                    IconButton(
+                        onClick = {
+                            flashMode = if (flashMode == ImageCapture.FLASH_MODE_ON)
+                                ImageCapture.FLASH_MODE_OFF else ImageCapture.FLASH_MODE_ON
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp)
+                            .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = if (flashMode == ImageCapture.FLASH_MODE_ON)
+                                Icons.Default.FlashOn else Icons.Default.FlashOff,
+                            contentDescription = "Toggle Flash",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    // AI Analysis Icon on Camera Screen
+                    // Visible only after a photo has been taken
+                    if (showAiIconOnCamera) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.5f),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(52.dp)
+                                .offset(x = (-10).dp, y = (-10).dp)
+                                .clickable {
+                                    // Trigger AI analysis for the most recent photo
+                                    mostRecentPhotoUri?.let { uri ->
+                                        showAiPopupOnCamera = true
+                                        isLoadingAnalysisOnCamera = true
+                                        analysisErrorMessageOnCamera = null
+                                        analysisResultOnCamera = null
+
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            try {
+                                                val bitmap: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                                    val source = ImageDecoder.createSource(context.contentResolver, uri)
+                                                    ImageDecoder.decodeBitmap(source) { decoder, info, source ->
+                                                        decoder.isMutableRequired = true
+                                                    }
+                                                } else {
+                                                    @Suppress("DEPRECATION")
+                                                    MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                                                }
+
+                                                if (bitmap != null) {
+                                                    val promptText = "Provide tips on angle, lighting, pose based on the scene. Shorten your response for up to 5 lines. Also provide a sample picture with the improvements"
+                                                    val result = FirebaseImageAnalyzer.analyzeImage(bitmap, promptText)
+                                                    analysisResultOnCamera = AnalysisResult(
+                                                        suggestion = result.first,
+                                                        enhancedImage = result.second
+                                                    )
+                                                } else {
+                                                    analysisErrorMessageOnCamera = "Error: Could not load image for analysis."
+                                                    Log.e("CameraScreen", "Could not convert Uri to Bitmap for analysis: $uri")
+                                                }
+                                            } catch (e: Exception) {
+                                                analysisErrorMessageOnCamera = "Analysis failed: ${e.localizedMessage ?: "Unknown error"}"
+                                                Log.e("CameraScreen", "AI analysis failed from CameraScreen: ${e.message}", e)
+                                            } finally {
+                                                isLoadingAnalysisOnCamera = false
+                                            }
+                                        }
+                                    } ?: run {
+                                        Toast.makeText(context, "No photo taken yet for analysis.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ai),
+                                    contentDescription = "AI Analysis Icon",
+                                    modifier = Modifier.size(20.dp),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+                        }
+                    }
+                } // End of Camera Preview Box
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // --- Control Row: Gallery, Capture, Switch Camera ---
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Gallery Button
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(0.95f) // Keep 95% width, or adjust if desired
-                            .aspectRatio(9f / 16f) // <--- THIS IS NOW SET TO MAKE IT LONGER
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(Color.Black),
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.1f))
+                            .clickable {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                    pickMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                } else {
+                                    Toast.makeText(context, "Gallery picker requires Android 10+ or explicit ACTION_PICK handling.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        AndroidView(
-                            factory = { previewView },
-                            modifier = Modifier.fillMaxSize()
-                        )
-
-                        // Flash Toggle Button - TOP RIGHT (aligned to this Camera Preview Box)
-                        IconButton(
-                            onClick = {
-                                flashMode = if (flashMode == ImageCapture.FLASH_MODE_ON)
-                                    ImageCapture.FLASH_MODE_OFF else ImageCapture.FLASH_MODE_ON
-                            },
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(12.dp)
-                                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-                        ) {
-                            Icon(
-                                imageVector = if (flashMode == ImageCapture.FLASH_MODE_ON)
-                                    Icons.Default.FlashOn else Icons.Default.FlashOff,
-                                contentDescription = "Toggle Flash",
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-
-                        // AI Label Card (uncommented and placed here)
-                        // This will display the label from your ML Kit ImageAnalyzer
-//                        Box(
-//                            modifier = Modifier
-//                                .align(Alignment.BottomCenter) // Aligns this whole container to the bottom-center of the camera preview
-//                                .fillMaxWidth(0.9f)
-//                                .padding(bottom = 16.dp)
-//                        ) {
-//                            // You had GlassmorphismCardWithText, assuming it's a custom composable.
-//                            // If not, you can use a regular Box with background and text.
-//                            // I'm using the simpler Box as per your commented out code.
-//                            Box(
-//                                modifier = Modifier
-//                                    .fillMaxWidth()
-//                                    .heightIn(min = 70.dp, max = 180.dp)
-//                                    .clip(MaterialTheme.shapes.medium)
-//                                    .background(Color.Black.copy(alpha = 0.5f))
-//                                    .border(1.dp, Color.White.copy(alpha = 0.3f), MaterialTheme.shapes.medium),
-//                                contentAlignment = Alignment.Center
-//                            ) {
-//                                Text(
-//                                    text = labelText.value,
-//                                    color = Color.White,
-//                                    style = MaterialTheme.typography.headlineSmall,
-//                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-//                                )
-//                            }
-//                            // The sparkle image you had is commented out, leaving it that way for now.
-//                            /*
-//                            Image(
-//                                painter = painterResource(id = R.drawable.sparkle),
-//                                contentDescription = "Card Overlap Image",
-//                                modifier = Modifier
-//                                    .align(Alignment.TopEnd)
-//                                    .size(64.dp)
-//                                    .offset(
-//                                        x = 24.dp,
-//                                        y = -24.dp
-//                                    )
-//                            )
-//                            */
-//                        }
-                    } // End of Camera Preview Box
-
-                    // Display AI Analysis Results below the camera preview
-                    analysisResult?.let { result ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                result.suggestion,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-
-//                            Image(
-//                                bitmap = analysisResult.enhancedImage!!.asImageBitmap(),
-//                                contentDescription = "AI-enhanced image",
+                        if (mostRecentPhotoUri != null) {
                             Image(
-                                bitmap = result.enhancedImage.asImageBitmap(),
-                                contentDescription = "AI-enhanced image",
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(200.dp) // Or adjust height as needed
-                                    .clip(RoundedCornerShape(12.dp)),
-                                contentScale = ContentScale.Fit // Use Fit to show the whole image
+                                painter = rememberAsyncImagePainter(model = mostRecentPhotoUri),
+                                contentDescription = "Most Recent Photo",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Image,
+                                contentDescription = "Gallery",
+                                tint = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(32.dp)
                             )
                         }
                     }
 
-
-                    // Spacer between camera preview/analysis and controls row
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Controls below the camera preview (Gallery, Capture, Switch Camera)
-                    Row(
+                    // Take Photo Button
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 24.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Gallery Button
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.1f))
-                                .clickable {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                        pickMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                                    } else {
-                                        Toast.makeText(context, "Gallery picker requires Android 10+ or explicit ACTION_PICK handling.", Toast.LENGTH_SHORT).show()
+                            .size(72.dp)
+                            .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
+                            .clickable {
+                                coroutineScope.launch {
+                                    val photoUri = takePhotoWithMediaStore(context, imageCapture)
+                                    photoUri?.let { uri ->
+                                        mostRecentPhotoUri = uri // Update thumbnail
+                                        showAiIconOnCamera = true // Show AI icon after taking a photo
+
+                                        val encodedUri = Uri.encode(uri.toString())
+                                        val navigateRoute = "photo_display_screen/$encodedUri?fromCamera=${true}"
+                                        navController.navigate(navigateRoute)
                                     }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (mostRecentPhotoUri != null) {
-                                Image(
-                                    painter = rememberAsyncImagePainter(model = mostRecentPhotoUri),
-                                    contentDescription = "Most Recent Photo",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Image,
-                                    contentDescription = "Gallery",
-                                    tint = Color.White.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
-                        }
-
-                        // Take Photo Button - Circular Outline with Inner Circle
-                        // In your CameraScreen.kt file
-
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
-                                .clickable {
-                                    coroutineScope.launch {
-                                        // Capture the photo to gallery
-                                        val photoUri = takePhotoWithMediaStore(context, imageCapture)
-                                        photoUri?.let { uri ->
-                                            mostRecentPhotoUri = uri // Update thumbnail for CameraScreen thumbnail if you have one
-
-                                            // Navigate to PhotoDisplayScreen
-                                            val encodedUri = Uri.encode(uri.toString())
-                                            val navigateRoute = "photo_display_screen/$encodedUri?fromCamera=${true}"
-                                            Log.d("PhotoAppDebug", "CameraScreen: Navigating to: $navigateRoute")
-                                            navController.navigate(navigateRoute) // Make sure this is uncommented
-                                        }
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(60.dp) // Smaller size for the inner circle
-                                    .clip(CircleShape)
-                                    .background(Color.White)
-                            )
-                        }
-
-                        // Camera Switch Button
-                        IconButton(
-                            onClick = {
-                                lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK)
-                                    CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
+                                }
                             },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
                             modifier = Modifier
-                                .size(56.dp)
-                        ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.camera_switch),
-                                contentDescription = "Switch Camera",
-                                modifier = Modifier.size(56.dp)
-                            )
-                        }
+                                .size(60.dp)
+                                .clip(CircleShape)
+                                .background(Color.White)
+                        )
+                    }
+
+                    // Camera Switch Button
+                    IconButton(
+                        onClick = {
+                            lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK)
+                                CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
+                        },
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.camera_switch),
+                            contentDescription = "Switch Camera",
+                            modifier = Modifier.size(56.dp)
+                        )
                     }
                 }
             }
         }
-    )
+
+        // --- AI Analysis Popup (AlertDialog) for CameraScreen ---
+        if (showAiPopupOnCamera) {
+            val interactionSource = remember { MutableInteractionSource() }
+            val isPressed by interactionSource.collectIsPressedAsState()
+
+            val buttonBackgroundColor = if (isPressed) {
+                Color.Blue.copy(alpha = 0.5f)
+            } else {
+                Color.Transparent
+            }
+
+            AlertDialog(
+                onDismissRequest = { showAiPopupOnCamera = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false),
+                content = { // <--- This content lambda starts here
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .heightIn(max = 350.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White)
+                    ) { // <--- Card's content lambda starts here
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(28.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(top = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                if (isLoadingAnalysisOnCamera) {
+                                    CircularProgressIndicator(color = Color(0xFFFCD04C))
+                                    Text(
+                                        text = "Analyzing your photo...",
+                                        fontFamily = Montserrat,
+                                        fontSize = 16.sp,
+                                        color = Color.DarkGray
+                                    )
+                                } else if (analysisErrorMessageOnCamera != null) {
+                                    Text(
+                                        text = analysisErrorMessageOnCamera!!,
+                                        fontFamily = Montserrat,
+                                        fontSize = 16.sp,
+                                        color = Color.Red,
+                                        textAlign = TextAlign.Center
+                                    )
+                                } else if (analysisResultOnCamera != null) {
+                                    Text(
+                                        text = "AI Photography Tips:",
+                                        fontFamily = Montserrat,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 20.sp,
+                                        color = Color.Black,
+                                        style = LocalTextStyle.current.copy(letterSpacing = 1.sp)
+                                    )
+                                    Text(
+                                        text = analysisResultOnCamera!!.suggestion,
+                                        fontFamily = Montserrat,
+                                        fontSize = 16.sp,
+                                        color = Color.DarkGray,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 8.dp)
+                                    )
+                                    analysisResultOnCamera!!.enhancedImage?.let { enhancedBitmap ->
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text(
+                                            text = "Suggested Improvement:",
+                                            fontFamily = Montserrat,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 18.sp,
+                                            color = Color.Black
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Image(
+                                            bitmap = enhancedBitmap.asImageBitmap(),
+                                            contentDescription = "Enhanced Photo Suggestion",
+                                            modifier = Modifier
+                                                .fillMaxWidth(0.8f)
+                                                .clip(RoundedCornerShape(12.dp)),
+                                            contentScale = ContentScale.FillWidth
+                                        )
+                                    }
+                                } else {
+                                    Text(
+                                        text = "No analysis available. Take a photo or load one from gallery.",
+                                        fontFamily = Montserrat,
+                                        fontSize = 16.sp,
+                                        color = Color.DarkGray,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 8.dp)
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = { showAiPopupOnCamera = false },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(36.dp)
+                                    .offset(x = 18.dp, y = (-18).dp)
+                                    .clip(CircleShape)
+                                    .background(buttonBackgroundColor)
+                                    .padding(8.dp),
+                                interactionSource = interactionSource
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "Close",
+                                    tint = Color.DarkGray,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+                    } // <--- This closes the Card's content lambda
+                } // <--- This closes the AlertDialog's content lambda
+            )
+        }
+    }
 }
 
-// Kept this function here as it's directly used by CameraScreen's UI for recent photo thumbnail
+// Helper Function: getMostRecentPhotoUri - MUST BE AT THE TOP-LEVEL OF THE FILE
+// Not nested inside any other function or class.
 private suspend fun getMostRecentPhotoUri(context: Context): Uri? = withContext(Dispatchers.IO) {
-    val collection =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        } else {
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        }
+    val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    } else {
+        MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+    }
 
     val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_TAKEN)
 
@@ -395,12 +523,7 @@ private suspend fun getMostRecentPhotoUri(context: Context): Uri? = withContext(
             putInt(ContentResolver.QUERY_ARG_LIMIT, 1)
         }
 
-        context.contentResolver.query(
-            collection,
-            projection,
-            queryArgs,
-            null
-        )?.use { cursor ->
+        context.contentResolver.query(collection, projection, queryArgs, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                 val id = cursor.getLong(idColumn)
@@ -412,13 +535,7 @@ private suspend fun getMostRecentPhotoUri(context: Context): Uri? = withContext(
     } else {
         val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC LIMIT 1"
 
-        context.contentResolver.query(
-            collection,
-            projection,
-            null,
-            null,
-            sortOrder
-        )?.use { cursor ->
+        context.contentResolver.query(collection, projection, null, null, sortOrder)?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                 val id = cursor.getLong(idColumn)

@@ -4,7 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.clickable // Import clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -29,15 +29,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import coil.compose.rememberAsyncImagePainter // Keep this for displaying the image from Uri
+import coil.compose.rememberAsyncImagePainter
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import android.util.Log // Import Log for debugging
-import android.graphics.Bitmap // Import Bitmap
-import androidx.compose.ui.graphics.asImageBitmap // To convert Bitmap to ImageBitmap for Compose Image
-
-// NEW IMPORTS FOR URI TO BITMAP CONVERSION
+import android.util.Log
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import android.graphics.ImageDecoder
 import android.os.Build
 
@@ -46,7 +44,7 @@ import android.os.Build
 fun PhotoDisplayScreen(
     navController: NavController,
     photoUri: Uri?,
-    fromCamera: Boolean = false // Default to false if not provided
+    fromCamera: Boolean = false
 ) {
     val context = LocalContext.current
 
@@ -66,26 +64,21 @@ fun PhotoDisplayScreen(
         Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect triggered with fromCamera: $fromCamera, photoUri: $photoUri")
         if (fromCamera && photoUri != null) {
             showPopup = true
-            isLoadingAnalysis = true // Start loading state
-            analysisErrorMessage = null // Clear any previous error
-            analysisResult = null // Clear previous result
+            isLoadingAnalysis = true
+            analysisErrorMessage = null
+            analysisResult = null
             Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect: Setting showPopup to true, starting analysis")
 
-            // Perform AI analysis here
             try {
-                // --- MODIFIED SECTION: Convert Uri to Bitmap using ImageDecoder ---
                 val bitmap: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     val source = ImageDecoder.createSource(context.contentResolver, photoUri)
                     ImageDecoder.decodeBitmap(source) { decoder, info, source ->
-                        // Optional: Configure bitmap here, e.g., to be mutable if needed
-                        decoder.isMutableRequired = true // Set to true if you need to modify the bitmap later
+                        decoder.isMutableRequired = true
                     }
                 } else {
-                    // For older Android versions (API < 28)
                     @Suppress("DEPRECATION")
                     android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, photoUri)
                 }
-                // --- END MODIFIED SECTION ---
 
                 if (bitmap != null) {
                     val promptText = "Provide tips on angle, lighting, pose based on the scene. Shorten your response for up to 5 lines. Also provide a sample picture with the improvements"
@@ -102,7 +95,7 @@ fun PhotoDisplayScreen(
                 analysisErrorMessage = "Analysis failed: ${e.localizedMessage ?: "Unknown error"}"
                 Log.e("PhotoDisplayScreen", "AI analysis failed: ${e.message}", e)
             } finally {
-                isLoadingAnalysis = false // End loading state
+                isLoadingAnalysis = false
             }
         }
     }
@@ -153,7 +146,6 @@ fun PhotoDisplayScreen(
                                 .fillMaxWidth()
                                 .wrapContentHeight()
                         ) {
-                            // This part still uses Coil for displaying the image, which is fine.
                             Image(
                                 painter = rememberAsyncImagePainter(model = photoUri),
                                 contentDescription = "Captured Photo",
@@ -184,6 +176,38 @@ fun PhotoDisplayScreen(
                                     .offset(x = (-20).dp, y = 20.dp),
                                 contentScale = ContentScale.Fit
                             )
+
+                            // --- AI ICON WITH CIRCLE (NOW CLICKABLE) ---
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.Black.copy(alpha = 0.5f),
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(52.dp)
+                                    .offset(x = (-10).dp, y = (-10).dp)
+                                    .clickable { // <--- ADDED CLICKABLE MODIFIER HERE
+                                        showPopup = true
+                                        // Optionally, if you want to re-run analysis every time
+                                        // or clear previous results when reopening:
+                                        // isLoadingAnalysis = true
+                                        // analysisErrorMessage = null
+                                        // analysisResult = null
+                                        // (You might need to re-call FirebaseImageAnalyzer based on your logic)
+                                    }
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.ai),
+                                        contentDescription = "AI Analysis Icon",
+                                        modifier = Modifier.size(20.dp),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                }
+                            }
+                            // --- END AI ICON WITH CIRCLE ---
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -272,7 +296,6 @@ fun PhotoDisplayScreen(
                 }
             }
 
-            // AlertDialog for the Pop-up Card (with close icon)
             if (showPopup) {
                 val interactionSource = remember { MutableInteractionSource() }
                 val isPressed by interactionSource.collectIsPressedAsState()
@@ -307,7 +330,6 @@ fun PhotoDisplayScreen(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    // --- AI ANALYSIS CONTENT ---
                                     if (isLoadingAnalysis) {
                                         CircularProgressIndicator(color = Color(0xFFFCD04C))
                                         Text(
@@ -370,10 +392,8 @@ fun PhotoDisplayScreen(
                                             modifier = Modifier.padding(horizontal = 8.dp)
                                         )
                                     }
-                                    // --- END AI ANALYSIS CONTENT ---
                                 }
 
-                                // Close Icon at top right
                                 IconButton(
                                     onClick = {
                                         Log.d("PhotoAppDebug", "Close button clicked! Attempting to close popup.")
