@@ -290,7 +290,7 @@ fun PhotoDisplayScreen(
                                     )
                                 }
 
-                                // Close Icon at top right - NOW WITH BRIGHT BACKGROUND FOR TESTING
+                                // Close Icon at top right - MOVED CLOSER TO CORNER
                                 IconButton(
                                     onClick = {
                                         Log.d("PhotoAppDebug", "Close button clicked! Attempting to close popup.")
@@ -298,10 +298,10 @@ fun PhotoDisplayScreen(
                                     },
                                     modifier = Modifier
                                         .align(Alignment.TopEnd)
-                                        .size(56.dp) // Generous touch target size
-                                        .offset(x = 12.dp, y = (-12).dp) // Visual offset for corner placement
-                                        .clip(CircleShape) // Ensures circular shape is applied first
-                                        .background(buttonBackgroundColor) // Apply the dynamic background color after clipping
+                                        .size(36.dp) // Generous touch target size
+                                        .offset(x = 18.dp, y = (-18).dp) // Adjusted offset for closer corner placement
+                                        .clip(CircleShape) // Ensures circular touch area
+                                        .background(buttonBackgroundColor) // Apply the dynamic background color
                                         .padding(8.dp), // Adds a buffer around the icon within the touch target
                                     interactionSource = interactionSource // Attach the interaction source
                                 ) {
@@ -309,7 +309,7 @@ fun PhotoDisplayScreen(
                                         imageVector = Icons.Filled.Close,
                                         contentDescription = "Close",
                                         tint = Color.DarkGray, // Keep icon tint constant
-                                        modifier = Modifier.size(24.dp) // Icon size remains the same
+                                        modifier = Modifier.size(32.dp) // Icon size remains the same
                                     )
                                 }
                             }
