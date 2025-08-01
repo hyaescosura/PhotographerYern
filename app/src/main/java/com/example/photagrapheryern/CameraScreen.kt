@@ -13,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.view.PreviewView
@@ -88,6 +89,8 @@ fun CameraScreen(navController: NavController) {
     // State to hold the result of the Firebase AI analysis
     var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) }
 
+    var cameraRef = remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+
     // CameraX ImageCapture use case
     val imageCapture = remember {
         ImageCapture.Builder()
@@ -113,7 +116,8 @@ fun CameraScreen(navController: NavController) {
         imageCapture = imageCapture,
         lensFacing = lensFacing,
         flashMode = flashMode,
-        onLabelDetected = { label -> labelText.value = label }
+        onLabelDetected = { label -> labelText.value = label },
+        onCameraReady = { camera -> cameraRef.value = camera }
     )
 
     // Launcher for picking a single image from the gallery
