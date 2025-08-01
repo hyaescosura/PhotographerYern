@@ -85,6 +85,7 @@ fun CameraScreen(navController: NavController) {
     var mostRecentPhotoUri by remember { mutableStateOf<Uri?>(null) } // State for the recent photo thumbnail
     // State to hold the result of the Firebase AI analysis
     var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) }
+    val cameraRef = remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
 
     // CameraX ImageCapture use case
     val imageCapture = remember {
@@ -111,7 +112,8 @@ fun CameraScreen(navController: NavController) {
         imageCapture = imageCapture,
         lensFacing = lensFacing,
         flashMode = flashMode,
-        onLabelDetected = { label -> labelText.value = label }
+        onLabelDetected = { label -> labelText.value = label },
+        onCameraReady = { camera -> cameraRef.value = camera }
     )
 
     // Launcher for picking a single image from the gallery
@@ -175,7 +177,18 @@ fun CameraScreen(navController: NavController) {
                         contentAlignment = Alignment.Center
                     ) {
                         AndroidView(
-                            factory = { previewView },
+                            factory = { previewView.apply {
+                                setOnTouchListener { _, event ->
+                                    if (event.action == android.view.MotionEvent.ACTION_UP) {
+                                        val factory = previewView.meteringPointFactory
+                                        val point = factory.createPoint(event.x, event.y)
+                                        val action = androidx.camera.core.FocusMeteringAction.Builder(point).build()
+
+                                        cameraRef.value?.cameraControl?.startFocusAndMetering(action)
+                                    }
+                                    true
+                                }
+                            }},
                             modifier = Modifier.fillMaxSize()
                         )
 

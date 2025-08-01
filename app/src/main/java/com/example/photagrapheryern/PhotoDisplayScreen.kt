@@ -88,7 +88,7 @@ fun PhotoDisplayScreen(
                 // --- END MODIFIED SECTION ---
 
                 if (bitmap != null) {
-                    val promptText = "Provide tips on angle, lighting, pose based on the scene. Shorten your response for up to 5 lines. Also provide a sample picture with the improvements"
+                    val promptText = "You're a photography expert. Give 2–3 simple tips to improve this photo (without props), and 1 thing I did well. Keep the suggestions short and practical. Generate a visual inspiration that keeps the same vibe. Avoid major edits or distortions. Remove bold from your responses"
                     val result = FirebaseImageAnalyzer.analyzeImage(bitmap, promptText)
                     analysisResult = AnalysisResult(
                         suggestion = result.first,
