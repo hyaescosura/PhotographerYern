@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
+//import android.graphics.Camera
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -28,6 +29,9 @@ import java.util.Date
 import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import androidx.camera.core.Camera
+
+
 
 // Data class for analysis result - This can stay in CameraFunctions if it's strictly for camera-related analysis
 // Or move it to a shared file if used broadly across the app. For now, let's keep it here.
@@ -44,7 +48,9 @@ fun rememberCameraUseCases(
     imageCapture: ImageCapture,
     lensFacing: Int,
     flashMode: Int,
-    onLabelDetected: (String) -> Unit
+    onLabelDetected: (String) -> Unit,
+    onCameraReady: (Camera) -> Unit
+
 ) {
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
 
@@ -55,7 +61,6 @@ fun rememberCameraUseCases(
             it.setSurfaceProvider(previewView.surfaceProvider)
         }
 
-        // ImageAnalysis for continuous frame processing (e.g., for object detection labels)
         val analyzerUseCase = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
@@ -68,13 +73,14 @@ fun rememberCameraUseCases(
 
         try {
             cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(
+            val camera = cameraProvider.bindToLifecycle(
                 lifecycleOwner,
                 CameraSelector.Builder().requireLensFacing(lensFacing).build(),
                 preview,
-                analyzerUseCase, // Bind the analyzerUseCase
+                analyzerUseCase,
                 imageCapture
             )
+            onCameraReady(camera)
         } catch (e: Exception) {
             Log.e("CameraFunctions", "Failed to bind camera", e)
         }
