@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,17 +50,14 @@ fun PhotoDisplayScreen(
 
     var showPopup by remember { mutableStateOf(false) }
 
-    // Ensure these lines are present:
     Log.d("PhotoAppDebug", "PhotoDisplayScreen: Received fromCamera: $fromCamera (at start of composable)")
     Log.d("PhotoAppDebug", "PhotoDisplayScreen: Received photoUri: $photoUri")
 
 
     LaunchedEffect(key1 = fromCamera) {
-        // Ensure this line is present:
         Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect triggered with fromCamera: $fromCamera")
         if (fromCamera) {
             showPopup = true
-            // Ensure this line is present:
             Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect: Setting showPopup to true")
         }
     }
@@ -104,6 +103,7 @@ fun PhotoDisplayScreen(
                             .wrapContentHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        // THIS IS THE BOX THAT CONTAINS THE PHOTO AND NOW THE SPARKLE IMAGES
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -116,6 +116,28 @@ fun PhotoDisplayScreen(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(24.dp)),
                                 contentScale = ContentScale.FillWidth
+                            )
+
+                            // SPARKLE IMAGE - Top Right of the PHOTO CARD
+                            Image(
+                                painter = painterResource(id = R.drawable.sparkle), // Using R.drawable.sparkle for top right
+                                contentDescription = "Sparkle decoration",
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd) // Position relative to the photo card
+                                    .size(72.dp) // Set size to 72.dp
+                                    .offset(x = 20.dp, y = (-20).dp), // Adjust offset to position outside but near the corner
+                                contentScale = ContentScale.Fit
+                            )
+
+                            // SPARKLE IMAGE - Bottom Left of the PHOTO CARD
+                            Image(
+                                painter = painterResource(id = R.drawable.sparkle), // Using R.drawable.sparkle for bottom left
+                                contentDescription = "Sparkle decoration",
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart) // Position relative to the photo card
+                                    .size(72.dp) // Set size to 72.dp
+                                    .offset(x = (-20).dp, y = 20.dp), // Adjust offset to position outside but near the corner
+                                contentScale = ContentScale.Fit
                             )
                         }
 
@@ -205,8 +227,18 @@ fun PhotoDisplayScreen(
                 }
             }
 
-            // --- AlertDialog for the Pop-up Card (with close icon) ---
+            // AlertDialog for the Pop-up Card (with close icon)
             if (showPopup) {
+                val interactionSource = remember { MutableInteractionSource() }
+                val isPressed by interactionSource.collectIsPressedAsState()
+
+                // Define the background color based on pressed state - TEMPORARILY BRIGHT FOR TESTING
+                val buttonBackgroundColor = if (isPressed) {
+                    Color.Blue.copy(alpha = 0.5f) // Change this line
+                } else {
+                    Color.Transparent
+                }
+
                 AlertDialog(
                     onDismissRequest = { showPopup = false },
                     properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -221,24 +253,9 @@ fun PhotoDisplayScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(28.dp)
+                                    .padding(28.dp) // Main padding for the Card's content
                             ) {
-                                // Close Icon at top right
-                                IconButton(
-                                    onClick = { showPopup = false },
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .size(32.dp)
-                                        .offset(x = 12.dp, y = (-12).dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Close,
-                                        contentDescription = "Close",
-                                        tint = Color.DarkGray,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-
+                                // IMPORTANT: Column comes first, so the IconButton can be drawn on top
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -270,6 +287,29 @@ fun PhotoDisplayScreen(
                                         color = Color.DarkGray,
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                         modifier = Modifier.padding(horizontal = 8.dp)
+                                    )
+                                }
+
+                                // Close Icon at top right - NOW WITH BRIGHT BACKGROUND FOR TESTING
+                                IconButton(
+                                    onClick = {
+                                        Log.d("PhotoAppDebug", "Close button clicked! Attempting to close popup.")
+                                        showPopup = false
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .size(56.dp) // Generous touch target size
+                                        .offset(x = 12.dp, y = (-12).dp) // Visual offset for corner placement
+                                        .clip(CircleShape) // Ensures circular shape is applied first
+                                        .background(buttonBackgroundColor) // Apply the dynamic background color after clipping
+                                        .padding(8.dp), // Adds a buffer around the icon within the touch target
+                                    interactionSource = interactionSource // Attach the interaction source
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = "Close",
+                                        tint = Color.DarkGray, // Keep icon tint constant
+                                        modifier = Modifier.size(24.dp) // Icon size remains the same
                                     )
                                 }
                             }
