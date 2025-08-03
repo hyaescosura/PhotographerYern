@@ -1,25 +1,67 @@
 package com.example.photagrapheryern
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
+import android.util.Log
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable // Import clickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -28,16 +70,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import android.util.Log
-import android.graphics.Bitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import android.graphics.ImageDecoder
-import android.os.Build
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -189,8 +224,7 @@ fun PhotoDisplayScreen(
                                     .offset(x = (-10).dp, y = (-10).dp)
                                     .clickable { // <--- ADDED CLICKABLE MODIFIER HERE
                                         showPopup = true
-                                        // Optionally, if you want to re-run analysis every time
-                                        // or clear previous results when reopening:
+                                        // If you want to re-run analysis every time the AI icon is clicked, uncomment below:
                                         // isLoadingAnalysis = true
                                         // analysisErrorMessage = null
                                         // analysisResult = null
@@ -302,11 +336,14 @@ fun PhotoDisplayScreen(
                 val interactionSource = remember { MutableInteractionSource() }
                 val isPressed by interactionSource.collectIsPressedAsState()
 
+                // Changed the pressed color to Color.DarkGray.copy(alpha = 0.5f)
                 val buttonBackgroundColor = if (isPressed) {
-                    Color.Blue.copy(alpha = 0.5f)
+                    Color.DarkGray.copy(alpha = 0.5f)
                 } else {
                     Color.Transparent
                 }
+
+                val scrollState = rememberScrollState()
 
                 AlertDialog(
                     onDismissRequest = { showPopup = false },
@@ -324,78 +361,19 @@ fun PhotoDisplayScreen(
                                     .fillMaxSize()
                                     .padding(28.dp)
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .verticalScroll(rememberScrollState())
-                                        .padding(top = 16.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    if (isLoadingAnalysis) {
-                                        CircularProgressIndicator(color = Color(0xFFFCD04C))
-                                        Text(
-                                            text = "Analyzing your photo...",
-                                            fontFamily = Montserrat,
-                                            fontSize = 16.sp,
-                                            color = Color.DarkGray
-                                        )
-                                    } else if (analysisErrorMessage != null) {
-                                        Text(
-                                            text = analysisErrorMessage!!,
-                                            fontFamily = Montserrat,
-                                            fontSize = 16.sp,
-                                            color = Color.Red,
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                        )
-                                    } else if (analysisResult != null) {
-                                        Text(
-                                            text = "AI Photography Tips:",
-                                            fontFamily = Montserrat,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 20.sp,
-                                            color = Color.Black,
-                                            style = LocalTextStyle.current.copy(letterSpacing = 1.sp)
-                                        )
-                                        Text(
-                                            text = analysisResult!!.suggestion,
-                                            fontFamily = Montserrat,
-                                            fontSize = 16.sp,
-                                            color = Color.DarkGray,
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                            modifier = Modifier.padding(horizontal = 8.dp)
-                                        )
-                                        analysisResult!!.enhancedImage?.let { enhancedBitmap ->
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                            Text(
-                                                text = "Suggested Improvement:",
-                                                fontFamily = Montserrat,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 18.sp,
-                                                color = Color.Black
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Image(
-                                                bitmap = enhancedBitmap.asImageBitmap(),
-                                                contentDescription = "Enhanced Photo Suggestion",
-                                                modifier = Modifier
-                                                    .fillMaxWidth(0.8f)
-                                                    .clip(RoundedCornerShape(12.dp)),
-                                                contentScale = ContentScale.FillWidth
-                                            )
-                                        }
-                                    } else {
-                                        Text(
-                                            text = "Tap the camera to take a photo and get AI tips!",
-                                            fontFamily = Montserrat,
-                                            fontSize = 16.sp,
-                                            color = Color.DarkGray,
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                            modifier = Modifier.padding(horizontal = 8.dp)
-                                        )
-                                    }
-                                }
+                                // Pass the states needed for FadingScrollableContent to decide its internal display
+                                FadingScrollableContent(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    scrollState = scrollState,
+                                    isLoadingAnalysis = isLoadingAnalysis,
+                                    analysisErrorMessage = analysisErrorMessage, // Pass error message
+                                    analysisResult = analysisResult, // Pass analysis result
+                                    photoUri = photoUri // Pass photoUri to determine "Tap camera" message
+                                )
+                                // Note: The 'content' lambda is now removed here, as FadingScrollableContent
+                                // will manage all the inner content based on the states passed to it.
 
+                                // Close IconButton remains in the Box
                                 IconButton(
                                     onClick = {
                                         Log.d("PhotoAppDebug", "Close button clicked! Attempting to close popup.")
@@ -406,7 +384,7 @@ fun PhotoDisplayScreen(
                                         .size(36.dp)
                                         .offset(x = 18.dp, y = (-18).dp)
                                         .clip(CircleShape)
-                                        .background(buttonBackgroundColor)
+                                        .background(buttonBackgroundColor) // This will now turn dark gray when pressed
                                         .padding(8.dp),
                                     interactionSource = interactionSource
                                 ) {
@@ -421,6 +399,157 @@ fun PhotoDisplayScreen(
                         }
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun FadingScrollableContent(
+    modifier: Modifier = Modifier,
+    scrollState: ScrollState,
+    isLoadingAnalysis: Boolean,
+    analysisErrorMessage: String?,
+    analysisResult: AnalysisResult?,
+    photoUri: Uri? // Added to determine if "Tap camera" message should show
+) {
+    val Montserrat = FontFamily( // Re-define if needed, or pass from caller if fonts are global
+        Font(R.font.montserrat_semibold, FontWeight.SemiBold)
+    )
+
+    val showTopFade by remember { derivedStateOf { scrollState.value > 0 } }
+    val showBottomFade by remember { derivedStateOf { scrollState.value < scrollState.maxValue } }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        when {
+            isLoadingAnalysis -> {
+                // Display loading indicator centered in the Box
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(color = Color(0xFFFCD04C))
+                    Text(
+                        text = "Analyzing your photo...",
+                        fontFamily = Montserrat,
+                        fontSize = 16.sp,
+                        color = Color.DarkGray
+                    )
+                }
+            }
+            analysisErrorMessage != null -> {
+                // Display error message centered
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = analysisErrorMessage,
+                        fontFamily = Montserrat,
+                        fontSize = 16.sp,
+                        color = Color.Red,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+            analysisResult != null -> {
+                // Display scrollable analysis result
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(scrollState)
+                        .padding(top = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    // REMOVED: verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "AI Photography Tips:",
+                        fontFamily = Montserrat,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        color = Color.Black,
+                        style = LocalTextStyle.current.copy(letterSpacing = 1.sp)
+                    )
+                    // Added a small spacer after "AI Photography Tips:"
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = analysisResult.suggestion,
+                        fontFamily = Montserrat,
+                        fontSize = 16.sp,
+                        color = Color.DarkGray,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                    analysisResult.enhancedImage?.let { enhancedBitmap ->
+                        Text(
+                            text = "Suggested Improvement:",
+                            fontFamily = Montserrat,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 18.sp,
+                            color = Color.Black
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Image(
+                            bitmap = enhancedBitmap.asImageBitmap(),
+                            contentDescription = "Enhanced Photo Suggestion",
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .clip(RoundedCornerShape(12.dp)),
+                            contentScale = ContentScale.FillWidth
+                        )
+                    }
+                    // Add a spacer at the bottom of the scrollable content to ensure
+                    // there's some padding below the last element before the fade.
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // Top fade overlay (only applies to scrollable content)
+                if (showTopFade) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(24.dp)
+                            .align(Alignment.TopCenter)
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(Color.White, Color.White.copy(alpha = 0f))
+                                )
+                            )
+                    )
+                }
+
+                // Bottom fade overlay (only applies to scrollable content)
+                if (showBottomFade) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(24.dp)
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(Color.White.copy(alpha = 0f), Color.White)
+                                )
+                            )
+                    )
+                }
+            }
+            // This is the "Tap the camera" case
+            else -> {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Tap the camera to take a photo and get AI tips!",
+                        fontFamily = Montserrat,
+                        fontSize = 16.sp,
+                        color = Color.DarkGray,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                }
             }
         }
     }
