@@ -20,6 +20,8 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageCapture
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -59,6 +61,9 @@ import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.filled.Cached
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Dp
+import com.google.android.gms.common.config.GservicesValue.value
+import kotlinx.coroutines.delay
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,6 +78,9 @@ fun CameraScreen(navController: NavController) {
     val labelText = remember { mutableStateOf("Point your camera at something...") }
     var mostRecentPhotoUri by remember { mutableStateOf<Uri?>(null) }
     var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) }
+    var tapAnimationOffset by remember { mutableStateOf(Offset.Zero) }
+    var tapAnimationVisible by remember { mutableStateOf(false) }
+    val tapAnimationAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
 
     // store the bound Camera
     val cameraRef = remember { mutableStateOf<Camera?>(null) }
@@ -190,24 +198,52 @@ fun CameraScreen(navController: NavController) {
                     AndroidView(
                         factory = { previewView },
                         modifier = Modifier.fillMaxSize()
+                            .pointerInput(Unit) { // <-- Modifier is ADDED here
+                                detectTapGestures { pos ->
+                                    val camera = cameraRef.value ?: return@detectTapGestures
+                                    val point = previewView.meteringPointFactory.createPoint(pos.x, pos.y)
+                                    val action = FocusMeteringAction.Builder(point).build()
+
+                                    if (camera.cameraInfo.isFocusMeteringSupported(action)) {
+                                        camera.cameraControl.startFocusAndMetering(action)
+                                        Log.d("TapToFocus", "Tap-to-focus action started.")
+
+                                        // Trigger animation
+                                        tapAnimationOffset = pos
+                                        tapAnimationVisible = true
+                                        coroutineScope.launch {
+                                            tapAnimationAlpha.animateTo(
+                                                targetValue = 0.8f,
+                                                animationSpec = tween(durationMillis = 200)
+                                            )
+                                            delay(300)
+                                            tapAnimationAlpha.animateTo(
+                                                targetValue = 0f,
+                                                animationSpec = tween(durationMillis = 200)
+                                            ) {
+                                                if (value == 0f) {
+                                                    tapAnimationVisible = false
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Log.d("TapToFocus", "Tap-to-focus is not supported.")
+                                    }
+                                }
+                            }
                     )
-                    //Grid overlay
-                    androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
-                        val w = size.width
-                        val h = size.height
-                        val thirdW = w / 3f
-                        val thirdH = h / 3f
-                        val strokeWidth = 1.dp.toPx()
-                        val lineColor = Color.White.copy(alpha = 0.6f)
-
-                        // Vertical lines
-                        drawLine(lineColor, Offset(thirdW, 0f), Offset(thirdW, h), strokeWidth = strokeWidth)
-                        drawLine(lineColor, Offset(2 * thirdW, 0f), Offset(2 * thirdW, h), strokeWidth = strokeWidth)
-
-                        // Horizontal lines
-                        drawLine(lineColor, Offset(0f, thirdH), Offset(w, thirdH), strokeWidth = strokeWidth)
-                        drawLine(lineColor, Offset(0f, 2 * thirdH), Offset(w, 2 * thirdH), strokeWidth = strokeWidth)
+                    if (tapAnimationVisible) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            drawCircle(
+                                color = Color.White.copy(alpha = tapAnimationAlpha.value),
+                                radius = 60f,
+                                center = tapAnimationOffset
+                            )
+                        }
                     }
+                    //Call GridOverlay func
+                    GridOverlay()
+
                     // Flash button
                     IconButton(
                         onClick = {
@@ -392,3 +428,23 @@ private suspend fun getMostRecentPhotoUri(context: Context): Uri? = withContext(
     contentUri
 }
 
+@Composable
+//GridOverlay
+fun GridOverlay(
+    color: Color = Color.White.copy(alpha = 0.3f),
+    strokeWidth: Dp = 1.dp
+) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val thirdWidth = size.width / 3
+        val thirdHeight = size.height / 3
+        val strokePx = strokeWidth.toPx()
+
+        // Vertical lines
+        drawLine(color, Offset(thirdWidth, 0f), Offset(thirdWidth, size.height), strokePx)
+        drawLine(color, Offset(2 * thirdWidth, 0f), Offset(2 * thirdWidth, size.height), strokePx)
+
+        // Horizontal lines
+        drawLine(color, Offset(0f, thirdHeight), Offset(size.width, thirdHeight), strokePx)
+        drawLine(color, Offset(0f, 2 * thirdHeight), Offset(size.width, 2 * thirdHeight), strokePx)
+    }
+}
