@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack // Import for the back arrow icon
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -79,7 +80,7 @@ import coil.compose.rememberAsyncImagePainter
 fun PhotoDisplayScreen(
     navController: NavController,
     photoUri: Uri?,
-    fromCamera: Boolean = false
+    fromCamera: Boolean = false // Default to false if not provided
 ) {
     val context = LocalContext.current
 
@@ -94,15 +95,15 @@ fun PhotoDisplayScreen(
 
     Log.d("PhotoAppDebug", "PhotoDisplayScreen: Received fromCamera: $fromCamera (at start of composable)")
     Log.d("PhotoAppDebug", "PhotoDisplayScreen: Received photoUri: $photoUri")
+    Log.d("PhotoDisplayScreenDebug", "fromCamera received: $fromCamera, photoUri: $photoUri")
 
-    LaunchedEffect(key1 = fromCamera, key2 = photoUri) {
-        Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect triggered with fromCamera: $fromCamera, photoUri: $photoUri")
-        if (fromCamera && photoUri != null) {
+    LaunchedEffect(key1 = photoUri, key2 = fromCamera) {
+        if (photoUri != null && fromCamera && analysisResult == null && !isLoadingAnalysis) {
+            Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect: Starting analysis for new photo from camera.")
             showPopup = true
             isLoadingAnalysis = true
             analysisErrorMessage = null
             analysisResult = null
-            Log.d("PhotoAppDebug", "PhotoDisplayScreen: LaunchedEffect: Setting showPopup to true, starting analysis")
 
             try {
                 val bitmap: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -134,8 +135,14 @@ fun PhotoDisplayScreen(
             } finally {
                 isLoadingAnalysis = false
             }
+        } else if (photoUri == null) {
+            showPopup = false
+            analysisResult = null
+            isLoadingAnalysis = false
+            analysisErrorMessage = null
         }
     }
+
 
     Scaffold(
         // The topBar is still removed
@@ -171,7 +178,9 @@ fun PhotoDisplayScreen(
 
                 Spacer(modifier = Modifier.height(0.dp))
 
+                // --- Conditional Photo Display Area ---
                 if (photoUri != null) {
+                    // Photo display AFTER taking a photo or selecting from gallery
                     Column(
                         modifier = Modifier
                             .fillMaxWidth(0.9f)
@@ -214,7 +223,7 @@ fun PhotoDisplayScreen(
                                 contentScale = ContentScale.Fit
                             )
 
-                            // --- AI ICON WITH CIRCLE (NOW CLICKABLE) ---
+                            // AI ICON WITH CIRCLE (CLICKABLE)
                             Surface(
                                 shape = CircleShape,
                                 color = Color.Black.copy(alpha = 0.5f),
@@ -222,13 +231,10 @@ fun PhotoDisplayScreen(
                                     .align(Alignment.BottomEnd)
                                     .size(52.dp)
                                     .offset(x = (-10).dp, y = (-10).dp)
-                                    .clickable { // <--- ADDED CLICKABLE MODIFIER HERE
-                                        showPopup = true
-                                        // If you want to re-run analysis every time the AI icon is clicked, uncomment below:
-                                        // isLoadingAnalysis = true
-                                        // analysisErrorMessage = null
-                                        // analysisResult = null
-                                        // (You might need to re-call FirebaseImageAnalyzer based on your logic)
+                                    .clickable {
+                                        if (photoUri != null) {
+                                            showPopup = true
+                                        }
                                     }
                             ) {
                                 Box(
@@ -243,49 +249,89 @@ fun PhotoDisplayScreen(
                                     )
                                 }
                             }
-                            // --- END AI ICON WITH CIRCLE ---
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Button(
-                                onClick = { navController.popBackStack() },
-                                shape = RoundedCornerShape(50),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
-                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            // Conditional Button: Recapture or Back
+                            if (fromCamera) {
+                                // Recapture Button (when photo taken from camera)
+                                Button(
+                                    onClick = { navController.popBackStack() }, // Goes back to camera
+                                    shape = RoundedCornerShape(50),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
                                 ) {
-                                    Text(
-                                        text = "Recapture",
-                                        color = Color.White,
-                                        fontFamily = Montserrat,
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 16.sp
-                                    )
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = Color(0xFFFCD04C),
-                                        modifier = Modifier.size(28.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Box(
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentAlignment = Alignment.Center
+                                        Text(
+                                            text = "Recapture",
+                                            color = Color.White,
+                                            fontFamily = Montserrat,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 16.sp
+                                        )
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = Color(0xFFFCD04C),
+                                            modifier = Modifier.size(28.dp)
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Refresh,
-                                                contentDescription = "Recapture",
-                                                tint = Color.Black,
-                                                modifier = Modifier.size(22.dp)
-                                            )
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Refresh,
+                                                    contentDescription = "Recapture",
+                                                    tint = Color.Black,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Back Button (when photo is not from camera, e.g., gallery or initial launch)
+                                Button(
+                                    onClick = { navController.popBackStack() }, // Goes back to previous screen
+                                    shape = RoundedCornerShape(50),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Back",
+                                            color = Color.White,
+                                            fontFamily = Montserrat,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 16.sp
+                                        )
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = Color(0xFFFCD04C),
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.ArrowBack, // Changed icon
+                                                    contentDescription = "Back",
+                                                    tint = Color.Black,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -324,19 +370,46 @@ fun PhotoDisplayScreen(
                         }
                     }
                 } else {
-                    Text(
-                        text = "No photo to display.",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White
-                    )
+                    // Photo display when NOT YET taking a photo (initial state)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Take a photo to get started!",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = Color.White,
+                            fontFamily = Montserrat,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 20.sp
+                        )
+                        Spacer(modifier = Modifier.height(32.dp))
+                        Button(
+                            onClick = { navController.navigate("camera_screen") },
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFCD04C)),
+                            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
+                        ) {
+                            Text(
+                                text = "Take Photo",
+                                color = Color.Black,
+                                fontFamily = Montserrat,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 18.sp
+                            )
+                        }
+                    }
                 }
             }
 
+            // AI Analysis Popup (AlertDialog) - remains unchanged
             if (showPopup) {
                 val interactionSource = remember { MutableInteractionSource() }
                 val isPressed by interactionSource.collectIsPressedAsState()
 
-                // Changed the pressed color to Color.DarkGray.copy(alpha = 0.5f)
                 val buttonBackgroundColor = if (isPressed) {
                     Color.DarkGray.copy(alpha = 0.5f)
                 } else {
@@ -361,19 +434,15 @@ fun PhotoDisplayScreen(
                                     .fillMaxSize()
                                     .padding(28.dp)
                             ) {
-                                // Pass the states needed for FadingScrollableContent to decide its internal display
                                 FadingScrollableContent(
                                     modifier = Modifier.fillMaxWidth(),
                                     scrollState = scrollState,
                                     isLoadingAnalysis = isLoadingAnalysis,
-                                    analysisErrorMessage = analysisErrorMessage, // Pass error message
-                                    analysisResult = analysisResult, // Pass analysis result
-                                    photoUri = photoUri // Pass photoUri to determine "Tap camera" message
+                                    analysisErrorMessage = analysisErrorMessage,
+                                    analysisResult = analysisResult,
+                                    photoUri = photoUri
                                 )
-                                // Note: The 'content' lambda is now removed here, as FadingScrollableContent
-                                // will manage all the inner content based on the states passed to it.
 
-                                // Close IconButton remains in the Box
                                 IconButton(
                                     onClick = {
                                         Log.d("PhotoAppDebug", "Close button clicked! Attempting to close popup.")
@@ -384,7 +453,7 @@ fun PhotoDisplayScreen(
                                         .size(36.dp)
                                         .offset(x = 18.dp, y = (-18).dp)
                                         .clip(CircleShape)
-                                        .background(buttonBackgroundColor) // This will now turn dark gray when pressed
+                                        .background(buttonBackgroundColor)
                                         .padding(8.dp),
                                     interactionSource = interactionSource
                                 ) {
@@ -404,6 +473,7 @@ fun PhotoDisplayScreen(
     }
 }
 
+// FadingScrollableContent remains unchanged as its logic handles internal popup content
 @Composable
 fun FadingScrollableContent(
     modifier: Modifier = Modifier,
@@ -411,9 +481,9 @@ fun FadingScrollableContent(
     isLoadingAnalysis: Boolean,
     analysisErrorMessage: String?,
     analysisResult: AnalysisResult?,
-    photoUri: Uri? // Added to determine if "Tap camera" message should show
+    photoUri: Uri?
 ) {
-    val Montserrat = FontFamily( // Re-define if needed, or pass from caller if fonts are global
+    val Montserrat = FontFamily(
         Font(R.font.montserrat_semibold, FontWeight.SemiBold)
     )
 
@@ -423,7 +493,6 @@ fun FadingScrollableContent(
     Box(modifier = modifier.fillMaxSize()) {
         when {
             isLoadingAnalysis -> {
-                // Display loading indicator centered in the Box
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -439,7 +508,6 @@ fun FadingScrollableContent(
                 }
             }
             analysisErrorMessage != null -> {
-                // Display error message centered
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -455,13 +523,11 @@ fun FadingScrollableContent(
                 }
             }
             analysisResult != null -> {
-                // Display scrollable analysis result
                 Column(
                     modifier = Modifier
                         .verticalScroll(scrollState)
                         .padding(top = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    // REMOVED: verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
                         text = "AI Photography Tips:",
@@ -471,7 +537,6 @@ fun FadingScrollableContent(
                         color = Color.Black,
                         style = LocalTextStyle.current.copy(letterSpacing = 1.sp)
                     )
-                    // Added a small spacer after "AI Photography Tips:"
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = analysisResult.suggestion,
@@ -482,6 +547,7 @@ fun FadingScrollableContent(
                         modifier = Modifier.padding(horizontal = 8.dp)
                     )
                     analysisResult.enhancedImage?.let { enhancedBitmap ->
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Suggested Improvement:",
                             fontFamily = Montserrat,
@@ -499,12 +565,9 @@ fun FadingScrollableContent(
                             contentScale = ContentScale.FillWidth
                         )
                     }
-                    // Add a spacer at the bottom of the scrollable content to ensure
-                    // there's some padding below the last element before the fade.
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                // Top fade overlay (only applies to scrollable content)
                 if (showTopFade) {
                     Box(
                         modifier = Modifier
@@ -519,7 +582,6 @@ fun FadingScrollableContent(
                     )
                 }
 
-                // Bottom fade overlay (only applies to scrollable content)
                 if (showBottomFade) {
                     Box(
                         modifier = Modifier
@@ -534,7 +596,6 @@ fun FadingScrollableContent(
                     )
                 }
             }
-            // This is the "Tap the camera" case
             else -> {
                 Column(
                     modifier = Modifier.fillMaxSize(),
