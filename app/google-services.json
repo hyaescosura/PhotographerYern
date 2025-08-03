@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "928151548274",
-    "project_id": "photographeryern",
-    "storage_bucket": "photographeryern.firebasestorage.app"
+    "project_number": "218678975816",
+    "project_id": "photographeryern2",
+    "storage_bucket": "photographeryern2.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:928151548274:android:4c595f9d06f795013b6deb",
+        "mobilesdk_app_id": "1:218678975816:android:8c2eff20dce10c75ff277d",
         "android_client_info": {
           "package_name": "com.example.photagrapheryern"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBfDhBp16TZ0BsQN6GUXGUqVkPMike84UY"
+          "current_key": "AIzaSyDADSShcZJiCQHuUaKC5tSe3Atbo-9IySk"
         }
       ],
       "services": {
@@ -26,7 +26,7 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:928151548274:android:62f1985b473f3b6b3b6deb",
+        "mobilesdk_app_id": "1:218678975816:android:8c2eff20dce10c75ff277d",
         "android_client_info": {
           "package_name": "com.example.photagrapheryern.dev"
         }
@@ -34,7 +34,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBfDhBp16TZ0BsQN6GUXGUqVkPMike84UY"
+          "current_key": "AIzaSyDADSShcZJiCQHuUaKC5tSe3Atbo-9IySk"
         }
       ],
       "services": {
