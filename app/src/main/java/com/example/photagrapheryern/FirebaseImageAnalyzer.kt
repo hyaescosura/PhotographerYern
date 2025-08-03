@@ -24,20 +24,11 @@ object FirebaseImageAnalyzer {
 
     suspend fun analyzeImage(bitmap: Bitmap, prompttext: String = "What should I improve in this photo?"): Pair<String, Bitmap> {
         return try {
-            /*val response = model.generateContent(
-                 content {
-                     image(bitmap)
-                     text(prompt)
-                 }
-             )  */
             val prompt = content {
                 image (bitmap)
                 text (prompttext)
             }
             var generatedImageAsBitmap: Bitmap? = null
-            // ...
-            //generatedImageAsBitmap = part.asImageOrNull()
-
             var text = ""
             val response = model.generateContent(prompt).candidates.first().content
             for (part in response.parts) {
