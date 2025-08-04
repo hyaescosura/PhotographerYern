@@ -32,7 +32,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack // Import for the back arrow icon
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -145,7 +145,7 @@ fun PhotoDisplayScreen(
 
 
     Scaffold(
-        // The topBar is still removed
+        // The topBar is removed
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -326,7 +326,7 @@ fun PhotoDisplayScreen(
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Icon(
-                                                    imageVector = Icons.Filled.ArrowBack, // Changed icon
+                                                    imageVector = Icons.Filled.ArrowBack,
                                                     contentDescription = "Back",
                                                     tint = Color.Black,
                                                     modifier = Modifier.size(22.dp)
@@ -405,7 +405,7 @@ fun PhotoDisplayScreen(
                 }
             }
 
-            // AI Analysis Popup (AlertDialog) - remains unchanged
+            // AI Analysis Popup (AlertDialog)
             if (showPopup) {
                 val interactionSource = remember { MutableInteractionSource() }
                 val isPressed by interactionSource.collectIsPressedAsState()
@@ -473,7 +473,6 @@ fun PhotoDisplayScreen(
     }
 }
 
-// FadingScrollableContent remains unchanged as its logic handles internal popup content
 @Composable
 fun FadingScrollableContent(
     modifier: Modifier = Modifier,

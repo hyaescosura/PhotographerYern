@@ -1,4 +1,3 @@
-// ImageAnalyzer.kt
 package com.example.photagrapheryern.ml
 
 import android.annotation.SuppressLint

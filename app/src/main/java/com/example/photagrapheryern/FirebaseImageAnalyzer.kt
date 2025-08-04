@@ -2,11 +2,9 @@ package com.example.photagrapheryern
 
 import android.graphics.Bitmap
 import android.util.Log
+import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.GenerativeBackend
-import com.google.firebase.ai.*
-import kotlinx.coroutines.tasks.await
-import com.google.firebase.Firebase
 import com.google.firebase.ai.type.ImagePart
 import com.google.firebase.ai.type.ResponseModality
 import com.google.firebase.ai.type.TextPart

@@ -1,6 +1,8 @@
 package com.example.photagrapheryern
 
+import android.annotation.SuppressLint
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
@@ -16,7 +18,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -26,10 +32,24 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.Cached
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Image
@@ -38,34 +58,53 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.navigation.NavController
-import coil.compose.rememberAsyncImagePainter
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import androidx.compose.material.icons.filled.Cached
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner
+import androidx.navigation.NavController
+import coil.compose.rememberAsyncImagePainter
+import com.example.photagrapheryern.ml.ImageAnalyzer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.math.absoluteValue
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material.icons.filled.BrightnessMedium // Import for brightness icon
+
+// Data class for analysis result
+data class AnalysisResult(
+    val suggestion: String,
+    val enhancedImage: Bitmap
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,7 +117,7 @@ fun CameraScreen(navController: NavController) {
     var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
     val labelText = remember { mutableStateOf("Point your camera at something...") }
     var mostRecentPhotoUri by remember { mutableStateOf<Uri?>(null) }
-    var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) } // Assuming AnalysisResult is defined elsewhere
+    var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) }
     var tapAnimationOffset by remember { mutableStateOf(Offset.Zero) }
     var tapAnimationVisible by remember { mutableStateOf(false) }
     val tapAnimationAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -154,7 +193,7 @@ fun CameraScreen(navController: NavController) {
         ) {
             // Background
             Image(
-                painter = painterResource(id = R.drawable.bg3), // Ensure R.drawable.bg3 exists
+                painter = painterResource(id = R.drawable.bg3),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
@@ -349,7 +388,7 @@ fun CameraScreen(navController: NavController) {
                                     activeTrackColor = Color(0xFFFCD04C),
                                     inactiveTrackColor = Color.White.copy(alpha = 0.3f)
                                 ),
-                                modifier = Modifier.width(205.dp) // <-- Reduced from 240.dp to 180.dp
+                                modifier = Modifier.width(205.dp)
                             )
                         }
                     }
@@ -374,7 +413,7 @@ fun CameraScreen(navController: NavController) {
                                     .background(Color.Black.copy(alpha = 0.4f))
                                     .clickable {
                                         cameraRef.value?.cameraControl?.setZoomRatio(level)
-                                        zoomRatio = level // Update zoomRatio when a fixed zoom button is clicked
+                                        zoomRatio = level
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -460,7 +499,7 @@ fun CameraScreen(navController: NavController) {
                             .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
                             .clickable {
                                 coroutineScope.launch {
-                                    val uri = takePhotoWithMediaStore(context, imageCapture) // Assuming takePhotoWithMediaStore is defined elsewhere
+                                    val uri = takePhotoWithMediaStore(context, imageCapture)
                                     uri?.let {
                                         mostRecentPhotoUri = it
                                         val encoded = Uri.encode(it.toString())
@@ -500,6 +539,96 @@ fun CameraScreen(navController: NavController) {
             }
         }
     }
+}
+
+@Composable
+fun rememberCameraUseCases(
+    context: Context,
+    lifecycleOwner: LifecycleOwner,
+    previewView: PreviewView,
+    imageCapture: ImageCapture,
+    lensFacing: Int,
+    flashMode: Int,
+    onLabelDetected: (String) -> Unit,
+    onCameraReady: (Camera) -> Unit
+) {
+    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
+
+    LaunchedEffect(lensFacing, flashMode) {
+        val cameraProvider = cameraProviderFuture.get()
+
+        val preview = Preview.Builder().build().also {
+            it.setSurfaceProvider(previewView.surfaceProvider)
+        }
+
+        val analyzerUseCase = ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+            .also {
+                it.setAnalyzer(ContextCompat.getMainExecutor(context),
+                    ImageAnalyzer { label -> onLabelDetected(label) })
+            }
+
+        imageCapture.flashMode = flashMode
+
+        try {
+            cameraProvider.unbindAll()
+            val camera = cameraProvider.bindToLifecycle(
+                lifecycleOwner,
+                CameraSelector.Builder().requireLensFacing(lensFacing).build(),
+                preview,
+                analyzerUseCase,
+                imageCapture
+            )
+            onCameraReady(camera)
+        } catch (e: Exception) {
+            Log.e("CameraScreen", "Failed to bind camera", e)
+        }
+    }
+}
+
+/**
+ * Handles taking a photo and saving it to MediaStore.
+ * This function is now a suspend function that returns the Uri of the saved image.
+ *
+ * @param context The current Android context.
+ * @param imageCapture The ImageCapture use case.
+ * @return The Uri of the saved image if successful, null otherwise.
+ */
+@SuppressLint("SimpleDateFormat")
+suspend fun takePhotoWithMediaStore(
+    context: Context,
+    imageCapture: ImageCapture
+): Uri? = suspendCancellableCoroutine { continuation ->
+    val name = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+    val contentValues = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            put(MediaStore.Images.Media.RELATIVE_PATH, "DCIM/PhotographerYern")
+        }
+    }
+
+    val options = ImageCapture.OutputFileOptions.Builder(
+        context.contentResolver,
+        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+        contentValues
+    ).build()
+
+    imageCapture.takePicture(options, ContextCompat.getMainExecutor(context),
+        object : ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                Toast.makeText(context, "Photo saved to gallery", Toast.LENGTH_SHORT).show()
+                Log.d("CameraScreen", "Saved: ${output.savedUri}")
+                continuation.resume(output.savedUri)
+            }
+
+            override fun onError(exc: ImageCaptureException) {
+                Toast.makeText(context, "Capture failed", Toast.LENGTH_SHORT).show()
+                Log.e("CameraScreen", "Error: ${exc.message}", exc)
+                continuation.resumeWithException(exc)
+            }
+        })
 }
 
 // Async load the most recent photo

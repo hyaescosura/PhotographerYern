@@ -10,9 +10,9 @@
               <option name="connection">
                 <ConnectionSetting>
                   <option name="appId" value="com.example.photagrapheryern.dev" />
-                  <option name="mobileSdkAppId" value="1:928151548274:android:62f1985b473f3b6b3b6deb" />
-                  <option name="projectId" value="photographeryern" />
-                  <option name="projectNumber" value="928151548274" />
+                  <option name="mobileSdkAppId" value="1:218678975816:android:8c2eff20dce10c75ff277d" />
+                  <option name="projectId" value="photographeryern2" />
+                  <option name="projectNumber" value="218678975816" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

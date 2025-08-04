@@ -65,10 +65,3 @@ fun SplashScreen(navController: NavController) {
         )
     }
 }
-
-//@Composable
-//fun CameraScreen(navController: NavController) {
-//    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-//        Text(text = "MAIN SCREEN", color = Color.White)
-//    }
-//}
