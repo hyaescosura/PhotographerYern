@@ -117,9 +117,9 @@ fun PhotoDisplayScreen(
                 }
 
                 if (bitmap != null) {
-                    val promptText = "You're a photography expert and influencer that gives huge emphasis to aesthetics, poses, and overall instagrammability. Give 2-3 simple tips to improve this photo. \n " +
-                            "Keep the suggestions short and practical. Provide a visual inspiration based on your suggestions \n" +
-                            " from pinterest. Don't make changes on the face captured. Avoid major distortions in the suggested improvements. Remove bold from your responses"
+                    val promptText = "You're a photography expert and influencer that gives huge emphasis to aesthetics, poses, angles, lighting and overall instagrammability. Give 2-3 simple tips to improve this photo. \n " +
+                            "Keep the suggestions short and practical. Provide a visual inspiration based on your suggestions from pinterest. \n" +
+                            "Don't make changes on the face captured. Avoid major distortions in the suggested improvements. Remove bold from your responses"
                     val result = FirebaseImageAnalyzer.analyzeImage(bitmap, promptText)
                     analysisResult = AnalysisResult(
                         suggestion = result.first,
