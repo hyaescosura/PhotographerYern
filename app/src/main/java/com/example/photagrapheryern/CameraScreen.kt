@@ -8,8 +8,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
-import android.view.MotionEvent
-import android.view.ScaleGestureDetector
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -61,10 +59,13 @@ import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.filled.Cached
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
-import com.google.android.gms.common.config.GservicesValue.value
 import kotlinx.coroutines.delay
-
+import kotlin.math.absoluteValue
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material.icons.filled.BrightnessMedium // Import for brightness icon
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,10 +78,17 @@ fun CameraScreen(navController: NavController) {
     var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
     val labelText = remember { mutableStateOf("Point your camera at something...") }
     var mostRecentPhotoUri by remember { mutableStateOf<Uri?>(null) }
-    var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) }
+    var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) } // Assuming AnalysisResult is defined elsewhere
     var tapAnimationOffset by remember { mutableStateOf(Offset.Zero) }
     var tapAnimationVisible by remember { mutableStateOf(false) }
     val tapAnimationAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+
+    // Declare zoomRatio here
+    var zoomRatio by remember { mutableStateOf(1f) }
+
+    // State for brightness (exposure compensation)
+    var brightnessLevel by remember { mutableStateOf(0f) } // Default to 0 (no compensation)
+    var isBrightnessSliderVisible by remember { mutableStateOf(false) } // New state to control slider visibility
 
     // store the bound Camera
     val cameraRef = remember { mutableStateOf<Camera?>(null) }
@@ -100,20 +108,9 @@ fun CameraScreen(navController: NavController) {
         }
     }
 
-    // ScaleGestureDetector for pinch-to-zoom
-    val scaleGestureDetector = remember {
-        ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                cameraRef.value?.let { cam ->
-                    val zoomState = cam.cameraInfo.zoomState.value
-                    val current = zoomState.zoomRatio
-                    val delta = detector.scaleFactor
-                    val newZoom = (current * delta).coerceIn(zoomState.minZoomRatio, zoomState.maxZoomRatio)
-                    cam.cameraControl.setZoomRatio(newZoom)
-                }
-                return true
-            }
-        })
+    // Apply brightness to camera control whenever brightnessLevel changes
+    LaunchedEffect(brightnessLevel) {
+        cameraRef.value?.cameraControl?.setExposureCompensationIndex(brightnessLevel.toInt())
     }
 
     rememberCameraUseCases(
@@ -124,7 +121,12 @@ fun CameraScreen(navController: NavController) {
         lensFacing = lensFacing,
         flashMode = flashMode,
         onLabelDetected = { labelText.value = it },
-        onCameraReady = { cameraRef.value = it }
+        onCameraReady = { camera ->
+            cameraRef.value = camera
+            // Get the initial exposure range from the camera when it's ready
+            val exposureState = camera.cameraInfo.exposureState
+            brightnessLevel = exposureState.exposureCompensationIndex.toFloat() // Initialize with current
+        }
     )
 
     val pickMediaLauncher = rememberLauncherForActivityResult(
@@ -152,7 +154,7 @@ fun CameraScreen(navController: NavController) {
         ) {
             // Background
             Image(
-                painter = painterResource(id = R.drawable.bg3),
+                painter = painterResource(id = R.drawable.bg3), // Ensure R.drawable.bg3 exists
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
@@ -179,10 +181,11 @@ fun CameraScreen(navController: NavController) {
                         .pointerInput(Unit) {
                             detectTransformGestures { _, _, zoom, _ ->
                                 cameraRef.value?.let { cam ->
-                                    val state = cam.cameraInfo.zoomState.value
-                                    val newZoom = (state.zoomRatio * zoom)
-                                        .coerceIn(state.minZoomRatio, state.maxZoomRatio)
+                                    val zoomState = cam.cameraInfo.zoomState.value
+                                    val newZoom = (zoomState.zoomRatio * zoom)
+                                        .coerceIn(zoomState.minZoomRatio, zoomState.maxZoomRatio)
                                     cam.cameraControl.setZoomRatio(newZoom)
+                                    zoomRatio = newZoom // Update zoomRatio when pinch-to-zoom occurs
                                 }
                             }
                         }
@@ -191,6 +194,25 @@ fun CameraScreen(navController: NavController) {
                                 val point = previewView.meteringPointFactory.createPoint(pos.x, pos.y)
                                 val action = FocusMeteringAction.Builder(point).build()
                                 cameraRef.value?.cameraControl?.startFocusAndMetering(action)
+
+                                // Trigger animation
+                                tapAnimationOffset = pos
+                                tapAnimationVisible = true
+                                coroutineScope.launch {
+                                    tapAnimationAlpha.animateTo(
+                                        targetValue = 0.8f,
+                                        animationSpec = tween(durationMillis = 200)
+                                    )
+                                    delay(300)
+                                    tapAnimationAlpha.animateTo(
+                                        targetValue = 0f,
+                                        animationSpec = tween(durationMillis = 200)
+                                    ) {
+                                        if (value == 0f) {
+                                            tapAnimationVisible = false
+                                        }
+                                    }
+                                }
                             }
                         },
                     contentAlignment = Alignment.Center
@@ -198,7 +220,7 @@ fun CameraScreen(navController: NavController) {
                     AndroidView(
                         factory = { previewView },
                         modifier = Modifier.fillMaxSize()
-                            .pointerInput(Unit) { // <-- Modifier is ADDED here
+                            .pointerInput(Unit) { // Re-added for tap-to-focus only, will be covered by outer Box's pointerInput
                                 detectTapGestures { pos ->
                                     val camera = cameraRef.value ?: return@detectTapGestures
                                     val point = previewView.meteringPointFactory.createPoint(pos.x, pos.y)
@@ -244,7 +266,7 @@ fun CameraScreen(navController: NavController) {
                     //Call GridOverlay func
                     GridOverlay()
 
-                    // Flash button
+                    // Flash button (remains the same)
                     IconButton(
                         onClick = {
                             flashMode = if (flashMode == ImageCapture.FLASH_MODE_ON)
@@ -264,7 +286,110 @@ fun CameraScreen(navController: NavController) {
                             tint = Color.White
                         )
                     }
+
+                    // --- Brightness Control ---
+
+                    // 1. Collapsed Brightness Icon (always present and clickable)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart) // Aligns this box itself within the parent preview Box
+                            .padding(12.dp) // Offset from the corner of the preview Box
+                            .clickable { isBrightnessSliderVisible = !isBrightnessSliderVisible } // Toggle visibility on click
+                            .background(Color.Black.copy(alpha = 0.4f), CircleShape) // Background for the icon itself
+                            .size(52.dp), // Fixed size for the clickable area, same as flash
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BrightnessMedium,
+                            contentDescription = "Brightness",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp) // Icon size matched to flash
+                        )
+                    }
+
+                    // 2. Expanded Brightness Slider (conditionally rendered and positioned)
+                    if (isBrightnessSliderVisible) {
+                        Column(
+                            // Position this Column relative to the TopStart of the camera preview Box.
+                            // The offset moves it rightward from the initial icon.
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .offset(x = 12.dp + 56.dp + 8.dp, y = 12.dp) // (initial padding) + (icon size) + (desired gap)
+                                .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
+                                .padding(horizontal = 20.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.BrightnessMedium,
+                                contentDescription = "Brightness",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp) // Icon size when expanded
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Slider(
+                                value = brightnessLevel,
+                                onValueChange = { newValue ->
+                                    cameraRef.value?.let { cam ->
+                                        val exposureState = cam.cameraInfo.exposureState
+                                        val minExposure = exposureState.exposureCompensationRange.lower.toFloat()
+                                        val maxExposure = exposureState.exposureCompensationRange.upper.toFloat()
+                                        val coercedValue = newValue.coerceIn(minExposure, maxExposure)
+                                        brightnessLevel = coercedValue
+                                    }
+                                },
+                                valueRange = cameraRef.value?.cameraInfo?.exposureState?.exposureCompensationRange?.let {
+                                    it.lower.toFloat()..(it.upper.toFloat())
+                                } ?: (-12f..12f),
+                                steps = cameraRef.value?.cameraInfo?.exposureState?.exposureCompensationStep?.let { step ->
+                                    ((cameraRef.value!!.cameraInfo.exposureState.exposureCompensationRange.upper - cameraRef.value!!.cameraInfo.exposureState.exposureCompensationRange.lower) / step.toFloat()).toInt() -1
+                                } ?: 0,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFFFCD04C),
+                                    activeTrackColor = Color(0xFFFCD04C),
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                                ),
+                                modifier = Modifier.width(205.dp) // <-- Reduced from 240.dp to 180.dp
+                            )
+                        }
+                    }
+
+                    // Zoom controls (moved here to overlap)
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 32.dp, vertical = 12.dp)
+                            .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(50.dp)),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val fixedZoomLevels = listOf(0.5f, 1f, 2f)
+                        fixedZoomLevels.forEach { level ->
+                            // Check if the current zoom level is close enough to the button level
+                            val isCurrentLevel = (zoomRatio - level).absoluteValue < 0.1f
+                            Box(
+                                modifier = Modifier
+                                    .size(if (isCurrentLevel) 44.dp else 34.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.4f))
+                                    .clickable {
+                                        cameraRef.value?.cameraControl?.setZoomRatio(level)
+                                        zoomRatio = level // Update zoomRatio when a fixed zoom button is clicked
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isCurrentLevel) "${level}x" else if (level == 0.5f) ".5" else level.toString(),
+                                    color = Color(0xFFFCD04C),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
+
+                Spacer(Modifier.height(24.dp))
 
                 // AI Analysis Result
                 analysisResult?.let { result ->
@@ -292,7 +417,7 @@ fun CameraScreen(navController: NavController) {
                     }
                 }
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(12.dp))
 
                 // Controls Row
                 Row(
@@ -335,7 +460,7 @@ fun CameraScreen(navController: NavController) {
                             .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
                             .clickable {
                                 coroutineScope.launch {
-                                    val uri = takePhotoWithMediaStore(context, imageCapture)
+                                    val uri = takePhotoWithMediaStore(context, imageCapture) // Assuming takePhotoWithMediaStore is defined elsewhere
                                     uri?.let {
                                         mostRecentPhotoUri = it
                                         val encoded = Uri.encode(it.toString())
@@ -361,7 +486,9 @@ fun CameraScreen(navController: NavController) {
                             else
                                 CameraSelector.LENS_FACING_BACK
                         },
-                        modifier = Modifier.size(56.dp)
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(Color.Black.copy(alpha = 0.4f), CircleShape) // Added background here
                     ) {
                         Icon(
                             imageVector = Icons.Default.Cached,
